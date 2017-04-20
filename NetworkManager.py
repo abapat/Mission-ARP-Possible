@@ -17,10 +17,10 @@ DHCP_PORT = 8888
 CA_PORT = 9999
 ARP_SIZE = 36 # need to update for nounce
 
-debug = True
+DEBUG = True
 
 def debug(s):
-    if debug:
+    if DEBUG:
         print("[DEBUG] " + str(s))
 
 '''
@@ -218,7 +218,7 @@ class SecureArp:
         return data
 
 
-def _broadcast_packet(data, port):
+def broadcast_packet(data, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)

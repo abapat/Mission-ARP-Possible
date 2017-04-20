@@ -7,19 +7,26 @@ import SecurityContext
 
 import socket
 import argparse
+import netifaces
 
-global debug
+DEBUG = True
 
 def debug(s):
-    if debug:
+    if DEBUG:
         print("[DEBUG] " + str(s))
+
+def get_interface():
+    for i in netifaces.interfaces():
+        if i != "lo":
+            return i
+    return None
 
 '''
 Connect to CA, continuously check file for update and send to CA
 @arg port to bind to
 '''
 def dhcp_mode():
-    s = NetworkManager.Socket('', DHCP_PORT, server=True, tcp=True)
+    s = NetworkManager.Socket('', NetworkManager.DHCP_PORT, server=True, tcp=True)
     s.wait_for_conn()
     # loop and send updates... simple echo for now
     s.send_message("Hello")
@@ -34,13 +41,13 @@ Listen on a port for queries
 '''
 def ca_mode(dhcp_ip):
     # Set up DHCP conn
-    dhcp_sock = NetworkManager.Socket(dhcp_ip, DHCP_PORT, tcp=True)
+    dhcp_sock = NetworkManager.Socket(dhcp_ip, NetworkManager.DHCP_PORT, tcp=True)
     data = dhcp_sock.tcp_recv_message(wait=True)
     print(data)
     dhcp_sock.send_message("Roger")
 
     # Listen on DHCP port AND CA port for queries
-    ca_sock = NetworkManager.Socket('', CA_PORT, server=True)
+    ca_sock = NetworkManager.Socket('', NetworkManager.CA_PORT, server=True)
     while True:
         data = dhcp_sock.tcp_recv_message()
         if data:
@@ -58,43 +65,40 @@ def host_mode(query_ip):
     # Assuming host's IP and public key already registered with CA
     # Send query, if any. Otherwise, listen on port to respond
 
-    # TODO define my_ip
+    my_ip = netifaces.ifaddresses(get_interface())[netifaces.AF_INET][0]['addr']
+    my_mac = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
 
     sock = NetworkManager.Socket(my_ip, NetworkManager.ARP_PORT, server=True)
     if query_ip:
         arp_query = NetworkManager.SecureArp()
-        if not arp_query.create_query('6c:40:08:bc:f6:ca', '127.0.0.1', query_ip):
+        if not arp_query.create_query(my_mac, my_ip, query_ip):
             print("Error: Couldnt create ARP query for ip %s" % str(query_ip))
         else:
             debug("Broadcasting ARP query")
-            _broadcast_packet(arp_query.serialize(), ARP_PORT)
+            NetworkManager.broadcast_packet(arp_query.serialize(), NetworkManager.ARP_PORT)
 
     print("[*] Listening for ARP messages")
     while True:
         # if query, respond to it. If response, validate and add to table
-        data, addr = sock.udp_recv_message(ARP_SIZE, wait=True)
+        data, addr = sock.udp_recv_message(NetworkManager.ARP_SIZE, wait=True)
         if data:
             response_arp = NetworkManager.SecureArp(raw=data)
             query_ip = response_arp.get_query_ip()
-            if query_ip: 
+            if query_ip:
                 print("[*] Received Query from %s" % str(addr))
                 response_arp.pkt.show()
 
-                # TODO define my_mac
-                if query_ip == my_ip and response_arp.create_response(my_mac, my_ip):
-                    if debug:
-                        debug("Sending response:")
-                        response_arp.pkt.show()
-
-                    sock.send_message(response_arp.serialize(), dest=addr)
-                else:
-                    print("Error in creating ARP response!")
-            else:
-                #if response_arp.validate_sig():
-                #    pass
-                print("[*] Received response:")
-                response_arp.pkt.show()
-                # Update ARP table
+                if query_ip == my_ip:
+                    if response_arp.create_response(my_mac, my_ip):
+                        sock.send_message(response_arp.serialize(), dest=addr)
+                    else:
+                        print("Error in creating ARP response!")
+        else:
+            #if response_arp.validate_sig():
+            #    pass
+            print("[*] Received response:")
+            response_arp.pkt.show()
+            # Update ARP table
 
 '''
 Add ip-public key mapping to table
@@ -130,7 +134,7 @@ def parse_args():
             print("Error: cannot be send query as DHCP server or Certificate Authority!")
             parser.print_help()
             sys.exit(1)
-        
+
         try:
             socket.inet_aton(res.q[0])
         except socket.error:
@@ -142,15 +146,12 @@ def parse_args():
             socket.inet_aton(res.c)
         except socket.error:
             print("Error: Invalid IP supplied: %s\n" % res.c)
-            sys.exit(1)        
+            sys.exit(1)
 
     return (res.d,res.c,res.q)
 
 
 def main():
-    global debug
-    debug = True
-
     args = parse_args()
     if args[0]:
         dhcp_mode()
