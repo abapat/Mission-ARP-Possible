@@ -1,15 +1,27 @@
 '''
 Driver script for running secure ARP protocol
 '''
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 import NetworkManager
 import SecurityContext
-from Crypto.PublicKey import RSA
+import os
+import time
 import socket
+import threading
 import argparse
 import netifaces
+import KeyManager
 
 DEBUG = True
+
+QUERY_MSG_SIZE = 100
+INT_SIZE = 4
+QUERY_TYPE = 'QueryType'
+GET_QUERY_TYPE = 'GET'
+IP_QUERY = 'IP'
+CA_IP = "192.168.1.1"
 
 def debug(s):
     if DEBUG:
@@ -21,16 +33,34 @@ def get_interface():
             return i
     return None
 
+class FileMonitor(FileSystemEventHandler):
+    def __init__(self, time, filepath, socket):
+        self.lastModificationTime = 0
+        self.filepath = filepath
+        self.socket = socket
+
+    def monitor(self):
+        while True:
+            if os.stat(self.filepath).st_mtime != self.lastModificationTime:
+                self.lastModificationTime = os.path.getmtime(self.filepath)
+                s.sendMessage("File was updated")
+
 '''
 Connect to CA, continuously check file for update and send to CA
 @arg port to bind to
 '''
 def dhcp_mode():
+    debug("DHCP mode")
+
+    # Init a socket to connect to the CA when it connects
     s = NetworkManager.Socket('', NetworkManager.DHCP_PORT, server=True, tcp=True)
     s.wait_for_conn()
-    # loop and send updates... simple echo for now
-    s.send_message("Hello")
-    #time.sleep(2)
+
+    monitor = FileMonitor(time.time(), "DHCP/state.txt", s)
+    thread = threading.Thread(target=monitor.monitor)
+    thread.daemon = True
+    thread.start()
+
     data = s.tcp_recv_message(wait=True) # data can be null
     print(data)
 
@@ -42,20 +72,21 @@ Listen on a port for queries
 def ca_mode(dhcp_ip):
     # Set up DHCP conn
     dhcp_sock = NetworkManager.Socket(dhcp_ip, NetworkManager.DHCP_PORT, tcp=True)
-    data = dhcp_sock.tcp_recv_message(wait=True)
-    print(data)
-    dhcp_sock.send_message("Roger")
 
     # Listen on DHCP port AND CA port for queries
     ca_sock = NetworkManager.Socket('', NetworkManager.CA_PORT, server=True)
+    # Key manager
+    key_manager = KeyManager()
     while True:
         data = dhcp_sock.tcp_recv_message()
         if data:
             print("[*] Received update from DHCP")
-            ca_handle_dhcp(data, dhcp_sock)
+            ca_handle_dhcp(key_manager, data, dhcp_sock)
+            print(key_manager)
 
         if ca_sock.check_for_udp_conn():
-            ca_handle_query(ca_sock) # handles query and kills conn
+            print("[*] Received update from host" + "FIX MEEEEEE")
+            ca_handle_query(key_manager, ca_sock) # handles query and kills conn
 
 '''
 First sends a query, if any. Then listens on port for ARP queries and responds to them
@@ -117,21 +148,39 @@ def host_mode(query_ip, keys):
                         print("[*] Received Invalid Response from %s" % str(addr))
                 # Update ARP table
 
+def get_public_key(sock, ip):
+    query = {QUERY_TYPE: GET_QUERY_TYPE, IP_QUERY: ip}
+    sock.send_message(str(query), (CA_IP, NetworkManager.CA_PORT))
+    data, addr = sock.udp_recv_message(INT_SIZE, True)
+    query_size = int(struct.unpack("!I", data)[0])
+    data, addr = sock.udp_recv_message(query_size, True)
+    return data
+
 '''
 Add ip-public key mapping to table
 @arg ip-public key mapping
 @arg socket to dhcp server (to send data)
 '''
-def ca_handle_dhcp(data, dhcp_sock):
-    pass
+def ca_handle_dhcp(key_manager, data, dhcp_sock):
+    key_map = eval(data)
+    key_manager.update(key_map)
 
 '''
 Handle a public key query from a node
-** Kills connection (socket.close) at the end **
 @arg socket to node - UDP
 '''
-def ca_handle_query(ca_sock):
-    pass
+def ca_handle_query(key_manager, ca_sock):
+    data, addr = ca_sock.udp_recv_message(QUERY_MSG_SIZE, True)
+    query = eval(data)
+    query_type = query[QUERY_TYPE]
+    if query_type == GET_QUERY_TYPE:
+        ip = query[PUBLIC_KEY_QUERY]
+    public_key = key_manager.get(ip)
+
+    dest = (addr[0], NetworkManager.ARP_PORT)
+    # Send public key size first and then public key
+    ca_sock.send_message(str(public_key))
+    ca_sock.send_message(public_key)
 
 # secure_arp.py [-d] [-c ip] [-q ip]
 def parse_args():
