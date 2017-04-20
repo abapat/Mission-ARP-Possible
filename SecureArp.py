@@ -4,7 +4,7 @@ Driver script for running secure ARP protocol
 
 import NetworkManager
 import SecurityContext
-
+from Crypto.PublicKey import RSA
 import socket
 import argparse
 import netifaces
@@ -61,17 +61,22 @@ def ca_mode(dhcp_ip):
 First sends a query, if any. Then listens on port for ARP queries and responds to them
 @arg query_ip the ip to send an ARP query for
 '''
-def host_mode(query_ip):
+def host_mode(query_ip, keys):
     # Assuming host's IP and public key already registered with CA
     # Send query, if any. Otherwise, listen on port to respond
 
     my_ip = netifaces.ifaddresses(get_interface())[netifaces.AF_INET][0]['addr']
     my_mac = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
+    nonce = None
+
+    print("Pub Key:")
+    print keys[0].exportKey()
 
     sock = NetworkManager.Socket(my_ip, NetworkManager.ARP_PORT, server=True)
     if query_ip:
         arp_query = NetworkManager.SecureArp()
-        if not arp_query.create_query(my_mac, my_ip, query_ip):
+        nonce = arp_query.create_query(my_mac, my_ip, query_ip)
+        if not nonce:
             print("Error: Couldnt create ARP query for ip %s" % str(query_ip))
         else:
             debug("Broadcasting ARP query")
@@ -81,27 +86,36 @@ def host_mode(query_ip):
     while True:
         # if query, respond to it. If response, validate and add to table
         data, addr = sock.udp_recv_message(NetworkManager.ARP_SIZE, wait=True)
+        debug("Received " + str(len(data)) + " bytes")
         if data and addr[0] != my_ip:
             response_arp = NetworkManager.SecureArp(raw=data)
             query_ip = response_arp.get_query_ip()
+
             if query_ip:
                 print("[*] Received Query from %s" % str(addr))
                 response_arp.pkt.show()
 
                 if query_ip == my_ip:
-                    if response_arp.create_response(my_mac, my_ip):
-                        print("Sending Response:")
+                    response_arp.create_response(my_mac, my_ip, keys)
+                    print("Sending Response:")
+                    response_arp.pkt.show()
+                    d = (addr[0],NetworkManager.ARP_PORT)
+                    sock.send_message(response_arp.serialize(), dest=d)
+            else:
+                # TODO check cache for key, or send query
+                '''
+                if debug:
+                    debug("Key received:")
+                    print(key.exportKey())
+                '''
+                if nonce:
+                    # check cache for key or query CA
+                    if response_arp.validate_sig(nonce, key):
+                        print("[*] Received Valid Response:")
                         response_arp.pkt.show()
-                        d = (addr[0],NetworkManager.ARP_PORT)
-                        sock.send_message(response_arp.serialize(), dest=d)
                     else:
-                        print("Error in creating ARP response!")
-        else:
-            #if response_arp.validate_sig():
-            #    pass
-            print("[*] Received response:")
-            response_arp.pkt.show()
-            # Update ARP table
+                        print("[*] Received Invalid Response from %s" % str(addr))
+                # Update ARP table
 
 '''
 Add ip-public key mapping to table
@@ -161,7 +175,9 @@ def main():
     elif args[1]:
         ca_mode(args[1])
     else:
-        host_mode(args[2])
+        c = SecurityContext.AsymmetricCrypto()
+        keys = (c.publicKey,c.privateKey)
+        host_mode(args[2], keys)
 
 if __name__ == '__main__':
     main()
