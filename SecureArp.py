@@ -81,7 +81,7 @@ def host_mode(query_ip):
     while True:
         # if query, respond to it. If response, validate and add to table
         data, addr = sock.udp_recv_message(NetworkManager.ARP_SIZE, wait=True)
-        if data:
+        if data and addr[0] != my_ip:
             response_arp = NetworkManager.SecureArp(raw=data)
             query_ip = response_arp.get_query_ip()
             if query_ip:
@@ -90,7 +90,10 @@ def host_mode(query_ip):
 
                 if query_ip == my_ip:
                     if response_arp.create_response(my_mac, my_ip):
-                        sock.send_message(response_arp.serialize(), dest=addr)
+                        print("Sending Response:")
+                        response_arp.pkt.show()
+                        d = (addr[0],NetworkManager.ARP_PORT)
+                        sock.send_message(response_arp.serialize(), dest=d)
                     else:
                         print("Error in creating ARP response!")
         else:
