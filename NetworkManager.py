@@ -86,7 +86,6 @@ class Socket:
         length = struct.pack("I", len(msg))
         sock.send(length + msg)
 
-
 '''
 Connect to CA, continuously check file for update and send to CA
 @arg port to bind to
