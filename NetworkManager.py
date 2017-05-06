@@ -123,6 +123,8 @@ def ca_mode(dhcp_ip):
         if ca_sock.check_for_udp_conn():
             ca_handle_query(ca_sock) # handles query and kills conn
 
+def host_mode():
+    pass
 
 def ca_handle_dhcp(data, dhcp_sock):
     pass
@@ -130,52 +132,11 @@ def ca_handle_dhcp(data, dhcp_sock):
 def ca_handle_query(ca_sock):
     pass
 
-def parse_args():
-    # secure_arp.py [-d] [-c ip] [-q ip]
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-d', action="store_true", help='DHCP server mode')
-    parser.add_argument('-c', metavar='IP addr', help='Certificate Authority Mode')
-    parser.add_argument('-q', metavar='IP addr', help='Send secure ARP query for an ip')
-    res = parser.parse_args()
-
-    if res.c and res.d:
-        print("Error: cannot be in CA mode and DHCP mode!")
-        parser.print_help()
-        sys.exit(1)
-
-    if res.q:
-        if res.c or res.d:
-            print("Error: cannot be send query as DHCP server or Certificate Authority!")
-            parser.print_help()
-            sys.exit(1)
-
-        try:
-            socket.inet_aton(res.q[0])
-        except socket.error:
-            print("Error: Invalid IP supplied: %s\n" % res.q[0])
-            sys.exit(1)
-
-    if res.c:
-        try:
-            socket.inet_aton(res.c)
-        except socket.error:
-            print("Error: Invalid IP supplied: %s\n" % res.c)
-            sys.exit(1)        
-
-    return (res.d,res.c,res.q)
-
-
 '''
 Simple test for sending and parsing arp packets
 '''
 def main():
-    args = parse_args()
-    if args[0]:
-        dhcp_mode()
-    elif args[1]:
-        ca_mode(args[1])
-    else:
-        host_mode(args[2])
+    pass
 
 if __name__ == '__main__':
     main()
