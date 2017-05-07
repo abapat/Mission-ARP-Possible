@@ -64,31 +64,9 @@ def startNetwork():
 
     # R1: Configure IP forwarding 
     net['R1'].cmd('sysctl -w net.ipv4.ip_forward=1')
-    net['R1'].cmd('sudo iptables -A POSTROUTING -t nat -o R1-eth1 -j MASQUERADE')
-    net['R1'].cmd('sudo iptables -A FORWARD -i R1-eth1 -o R1-eth0 -m ESTABLISHED,RELATED -j ACCEPT')
-    net['R1'].cmd('sudo iptables -A FORWARD -i R1-eth0 -o R1-eth1 -j ACCEPT')
-    
-    # # R2: Configure IP forwarding 
-    # net['R2'].cmd('sysctl -w net.ipv4.ip_forward=1')
-    # net['R2'].cmd('sudo iptables -A POSTROUTING -t nat -o R2-eth1 -j MASQUERADE')
-    # net['R2'].cmd('sudo iptables -A FORWARD -i R2-eth1 -o R2-eth0 -m ESTABLISHED,RELATED -j ACCEPT')
-    # net['R2'].cmd('sudo iptables -A FORWARD -i R2-eth0 -o R2-eth1 -j ACCEPT')
-
-    # # R3: Configure IP forwarding 
-    # net['R3'].cmd('sysctl -w net.ipv4.ip_forward=1')
-    # net['R3'].cmd('sudo iptables -A POSTROUTING -t nat -o R3-eth1 -j MASQUERADE')
-    # net['R3'].cmd('sudo iptables -A FORWARD -i R3-eth1 -o R3-eth0 -m ESTABLISHED,RELATED -j ACCEPT')
-    # net['R3'].cmd('sudo iptables -A FORWARD -i R3-eth0 -o R3-eth1 -j ACCEPT')
-
-    # # R4: Configure IP forwarding
-    # net['R4'].cmd('sysctl -w net.ipv4.ip_forward=1')
-    # net['R4'].cmd('sudo iptables -A POSTROUTING -t nat -o R4-eth0 -j MASQUERADE')
-    # net['R4'].cmd('sudo iptables -A FORWARD -i R4-eth0 -o R4-eth1 -m ESTABLISHED,RELATED -j ACCEPT')
-    # net['R4'].cmd('sudo iptables -A FORWARD -i R4-eth1 -o R4-eth0 -j ACCEPT')
-
 
     info('** Testing network connectivity\n')
-    # net.ping(net.hosts)
+    net.ping(net.hosts)
 
     info('** Dumping host processes\n')
     for host in net.hosts:
