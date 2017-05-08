@@ -8,6 +8,7 @@ import SecurityContext
 import socket
 import argparse
 import netifaces
+import KeyManager
 
 DEBUG = True
 
@@ -48,6 +49,7 @@ def ca_mode(dhcp_ip):
 
     # Listen on DHCP port AND CA port for queries
     ca_sock = NetworkManager.Socket('', NetworkManager.CA_PORT, server=True)
+    key_manager = KeyManager()
     while True:
         data = dhcp_sock.tcp_recv_message()
         if data:
@@ -55,7 +57,7 @@ def ca_mode(dhcp_ip):
             ca_handle_dhcp(data, dhcp_sock)
 
         if ca_sock.check_for_udp_conn():
-            ca_handle_query(ca_sock) # handles query and kills conn
+            ca_handle_query(key_manager, ca_sock) # handles query and kills conn
 
 '''
 First sends a query, if any. Then listens on port for ARP queries and responds to them
@@ -113,8 +115,15 @@ Handle a public key query from a node
 ** Kills connection (socket.close) at the end **
 @arg socket to node - UDP
 '''
-def ca_handle_query(ca_sock):
-    pass
+def ca_handle_query(key_manager, ca_sock):
+    data, addr = ca_sock.udp_recv_message(FIX ME, True)
+    query = eval(data)
+    query_type = query["QueryType"]
+    if query_type == 'Get':
+        ip = query["QueryIP"]
+    public_key = key_manager.get(ip)
+    ca_sock.send(public_key)
+    ca_sock.close()
 
 # secure_arp.py [-d] [-c ip] [-q ip]
 def parse_args():
