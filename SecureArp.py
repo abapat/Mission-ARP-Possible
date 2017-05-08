@@ -18,6 +18,11 @@ import KeyManager
 DEBUG = True
 
 QUERY_MSG_SIZE = 100
+INT_SIZE = 4
+QUERY_TYPE = 'QueryType'
+GET_QUERY_TYPE = 'GET'
+IP_QUERY = 'IP'
+CA_IP = "192.168.1.1"
 
 def debug(s):
     if DEBUG:
@@ -130,6 +135,14 @@ def host_mode(query_ip):
             response_arp.pkt.show()
             # Update ARP table
 
+def get_public_key(sock, ip):
+    query = {QUERY_TYPE: GET_QUERY_TYPE, IP_QUERY: ip}
+    sock.send_message(str(query), (CA_IP, NetworkManager.CA_PORT))
+    data, addr = sock.udp_recv_message(INT_SIZE, True)
+    query_size = int(struct.unpack("!I", data)[0])
+    data, addr = sock.udp_recv_message(query_size, True)
+    return data
+
 '''
 Add ip-public key mapping to table
 @arg ip-public key mapping
@@ -146,13 +159,14 @@ Handle a public key query from a node
 def ca_handle_query(key_manager, ca_sock):
     data, addr = ca_sock.udp_recv_message(QUERY_MSG_SIZE, True)
     query = eval(data)
-    query_type = query["QueryType"]
-    if query_type == 'Get':
-        ip = query["QueryIP"]
+    query_type = query[QUERY_TYPE]
+    if query_type == GET_QUERY_TYPE:
+        ip = query[PUBLIC_KEY_QUERY]
     public_key = key_manager.get(ip)
 
     dest = (addr[0], NetworkManager.ARP_PORT)
-    # Send public key
+    # Send public key size first and then public key
+    ca_sock.send_message(str(public_key))
     ca_sock.send_message(public_key)
 
 # secure_arp.py [-d] [-c ip] [-q ip]
