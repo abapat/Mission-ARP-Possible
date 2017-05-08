@@ -17,6 +17,8 @@ import KeyManager
 
 DEBUG = True
 
+QUERY_MSG_SIZE = 100
+
 def debug(s):
     if DEBUG:
         print("[DEBUG] " + str(s))
@@ -66,20 +68,20 @@ Listen on a port for queries
 def ca_mode(dhcp_ip):
     # Set up DHCP conn
     dhcp_sock = NetworkManager.Socket(dhcp_ip, NetworkManager.DHCP_PORT, tcp=True)
-    data = dhcp_sock.tcp_recv_message(wait=True)
-    print(data)
-    dhcp_sock.send_message("Roger")
 
     # Listen on DHCP port AND CA port for queries
     ca_sock = NetworkManager.Socket('', NetworkManager.CA_PORT, server=True)
+    # Key manager
     key_manager = KeyManager()
     while True:
         data = dhcp_sock.tcp_recv_message()
         if data:
             print("[*] Received update from DHCP")
-            ca_handle_dhcp(data, dhcp_sock)
+            ca_handle_dhcp(key_manager, data, dhcp_sock)
+            print(key_manager)
 
         if ca_sock.check_for_udp_conn():
+            print("[*] Received update from host" + "FIX MEEEEEE")
             ca_handle_query(key_manager, ca_sock) # handles query and kills conn
 
 '''
@@ -133,23 +135,25 @@ Add ip-public key mapping to table
 @arg ip-public key mapping
 @arg socket to dhcp server (to send data)
 '''
-def ca_handle_dhcp(data, dhcp_sock):
-    pass
+def ca_handle_dhcp(key_manager, data, dhcp_sock):
+    key_map = eval(data)
+    key_manager.update(key_map)
 
 '''
 Handle a public key query from a node
-** Kills connection (socket.close) at the end **
 @arg socket to node - UDP
 '''
 def ca_handle_query(key_manager, ca_sock):
-    data, addr = ca_sock.udp_recv_message("FIX ME", True)
+    data, addr = ca_sock.udp_recv_message(QUERY_MSG_SIZE, True)
     query = eval(data)
     query_type = query["QueryType"]
     if query_type == 'Get':
         ip = query["QueryIP"]
     public_key = key_manager.get(ip)
-    ca_sock.send(public_key)
-    ca_sock.close()
+
+    dest = (addr[0], NetworkManager.ARP_PORT)
+    # Send public key
+    ca_sock.send_message(public_key)
 
 # secure_arp.py [-d] [-c ip] [-q ip]
 def parse_args():
