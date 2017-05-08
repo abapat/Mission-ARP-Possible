@@ -37,7 +37,10 @@ class FileMonitor(FileSystemEventHandler):
         while True:
             if os.stat(self.filepath).st_mtime != self.lastModificationTime:
                 self.lastModificationTime = os.path.getmtime(self.filepath)
-                s.sendMessage("File was updated")
+                self.socket.send_message(str({"hi":"hello"})
+
+def initialize_keys():
+    pass
 
 '''
 Connect to CA, continuously check file for update and send to CA
@@ -45,18 +48,17 @@ Connect to CA, continuously check file for update and send to CA
 '''
 def dhcp_mode():
     debug("DHCP mode")
+    FILEPATH = "DHCP/state.txt"
+
+    if not os.path.isfile(FILENAME):
+        initialize_keys()
 
     # Init a socket to connect to the CA when it connects
-    s = NetworkManager.Socket('', NetworkManager.DHCP_PORT, server=True, tcp=True)
+    s = NetworkManager.Socket('', NetworkaManager.DHCP_PORT, server=True, tcp=True)
     s.wait_for_conn()
 
-    monitor = FileMonitor(time.time(), "DHCP/state.txt", s)
-    thread = threading.Thread(target=monitor.monitor)
-    thread.daemon = True
-    thread.start()
-
-    data = s.tcp_recv_message(wait=True) # data can be null
-    print(data)
+    monitor = FileMonitor(time.time(), FILENAME, s)
+    monitor.monitor()
 
 '''
 Connect to DHCP server and receive updates
