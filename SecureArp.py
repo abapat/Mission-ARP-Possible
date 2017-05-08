@@ -142,7 +142,7 @@ Handle a public key query from a node
 @arg socket to node - UDP
 '''
 def ca_handle_query(key_manager, ca_sock):
-    data, addr = ca_sock.udp_recv_message(FIX ME, True)
+    data, addr = ca_sock.udp_recv_message("FIX ME", True)
     query = eval(data)
     query_type = query["QueryType"]
     if query_type == 'Get':
