@@ -27,11 +27,13 @@ def parse_args():
             parser.print_help()
             sys.exit(1)
 
+        '''
         try:
             socket.inet_aton(res.q[0])
         except socket.error:
             print("Error: Invalid IP supplied: %s\n" % res.q[0])
             sys.exit(1)
+        '''
 
     if res.c:
         try:
