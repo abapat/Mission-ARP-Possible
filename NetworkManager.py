@@ -16,7 +16,12 @@ ARP_PORT = 7777
 DHCP_PORT = 8888
 CA_PORT = 9999
 ARP_SIZE = 36 # need to update for nounce
-# Class definitions for Socket and SecureArp
+
+debug = True
+
+def debug(s):
+    if debug:
+        print("[DEBUG] " + str(s))
 
 '''
 Wrapper over python socket module, for ease of use
@@ -52,6 +57,7 @@ class Socket:
             print("[*] Accepted connection from %s" % str(addr))
             self.conn = conn
 
+    # TODO implement
     def check_for_udp_conn(self):
         pass
 
@@ -92,7 +98,7 @@ class Socket:
         return data
 
     def udp_recv_message(self, size, wait=False):
-        print("Listening on %s" % str(self.sock.getsockname()))
+        debug("Listening on UDP %s" % str(self.sock.getsockname()))
         data = None
         addr = None
         if wait:
@@ -114,14 +120,14 @@ class Socket:
             sock = self.conn
 
         sock.settimeout(None)
-        print("Sending to %s" % str(sock.getsockname()))
         length = struct.pack("I", len(msg))
 
         if self.tcp:
+            debug("Sending to %s" % str(sock.getsockname()))
             sock.send(length + msg)
         else:
-            sock.sendto(length + msg, dest)
-
+            debug("Sending to %s" % str(dest))
+            sock.sendto(msg, dest)
 
 '''
 Class to handle parsing and creating SecureArp packets
@@ -174,11 +180,11 @@ class SecureArp:
         self.valid = True
         return True
 
-    def is_query(self):
-        if self.pkt.op == ARP.who_has:
-            return True
+    def get_query_ip(self):
+        if self.pkt.op == ARP.is_at: #if its not a query
+            return None
 
-        return False
+        return self.pkt.pdst
 
     # assuming packet already represents valid (parsed) query
     def create_response(self, src_mac, src_ip):
@@ -216,88 +222,10 @@ def _broadcast_packet(data, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    print("Sending broadcast to %s" % str(port))
-    sock.sendto(data, ('127.0.0.1', port))
-    #sock.sendto(data, ('255.255.255.255', port))
+    debug("Sending broadcast to %s" % str(port))
+    #sock.sendto(data, ('127.0.0.1', port))
+    sock.sendto(data, ('255.255.255.255', port))
 
-# Modes for nodes to continuously run in
-
-
-'''
-Connect to CA, continuously check file for update and send to CA
-@arg port to bind to
-'''
-def dhcp_mode():
-    s = Socket('', DHCP_PORT, server=True, tcp=True)
-    s.wait_for_conn()
-    # loop and send updates... simple echo for now
-    s.send_message("Hello")
-    #time.sleep(2)
-    data = s.tcp_recv_message(wait=True) # data can be null
-    print(data)
-
-'''
-Connect to DHCP server and receive updates
-Listen on a port for queries
-@arg ip of DHCP server
-'''
-def ca_mode(dhcp_ip):
-    # Set up DHCP conn
-    dhcp_sock = Socket(dhcp_ip, DHCP_PORT, tcp=True)
-    data = dhcp_sock.tcp_recv_message(wait=True)
-    print(data)
-    dhcp_sock.send_message("Roger")
-
-    # Listen on DHCP port AND CA port for queries
-    # TODO use threads
-    ca_sock = Socket('', CA_PORT, server=True)
-    while True:
-        data = dhcp_sock.tcp_recv_message()
-        if data:
-            print("[*] Received update from DHCP")
-            ca_handle_dhcp(data, dhcp_sock)
-
-        if ca_sock.check_for_udp_conn():
-            ca_handle_query(ca_sock) # handles query and kills conn
-
-
-def host_mode(query_ip, port):
-    # Assuming host's IP and public key already registered with CA
-    # Send query, if any. Otherwise, listen on port to respond
-    sock = Socket('127.0.0.1', port, server=True)
-    if query_ip:
-        arp_query = SecureArp()
-        if not arp_query.create_query('6c:40:08:bc:f6:ca', '127.0.0.1', query_ip):
-            print("Error: Couldnt create ARP query for ip %s" % str(query_ip))
-        else:
-            _broadcast_packet(arp_query.serialize(), ARP_PORT)
-
-    print("[*] Listening for ARP messages on port %s" % str(port))
-    while True:
-        # if query, respond to it. If response, validate and add to table
-        data, addr = sock.udp_recv_message(ARP_SIZE, wait=True)
-        if data:
-            response_arp = SecureArp(raw=data)
-            if response_arp.is_query():
-                print("[*] Received Query from %s" % str(addr))
-                response_arp.pkt.show()
-                if response_arp.create_response('d0:e7:82:dc:37:60', '127.0.0.1'):
-                    sock.send_message(response_arp.serialize(), dest=addr)
-                else:
-                    print("Error in creating ARP response!")
-            else:
-                #if response_arp.validate_sig():
-                #    pass
-                print("[*] Received response:")
-                response_arp.pkt.show()
-
-    pass
-
-def ca_handle_dhcp(data, dhcp_sock):
-    pass
-
-def ca_handle_query(ca_sock):
-    pass
 
 '''
 Simple test for sending and parsing arp packets
