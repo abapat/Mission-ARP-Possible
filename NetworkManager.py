@@ -126,7 +126,7 @@ class Socket:
             debug("Sending to %s" % str(sock.getsockname()))
             sock.send(length + msg)
         else:
-            debug("Sending to %s" % str(dest))
+            debug("Sending %d bytes to %s" % (len(msg),str(dest)))
             sock.sendto(msg, dest)
 
 '''
@@ -217,14 +217,20 @@ class SecureArp:
         data += str(self.sig) # needs to be able to send over network
         return data
 
+def __jank_broadcast(s,data,port):
+    subnet = '192.168.1.'
+    for x in range(1,255):
+        ip = subnet + str(x)
+        s.sendto(data, (ip, port))
 
 def broadcast_packet(data, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     debug("Sending broadcast to %s" % str(port))
+    __jank_broadcast(sock,data,port)
     #sock.sendto(data, ('127.0.0.1', port))
-    sock.sendto(data, ('255.255.255.255', port))
+    #sock.sendto(data, ('192.168.1.255', port))
 
 
 '''
