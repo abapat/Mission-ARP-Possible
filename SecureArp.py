@@ -1,11 +1,16 @@
 '''
 Driver script for running secure ARP protocol
 '''
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 import NetworkManager
 import SecurityContext
 
+import os
+import time
 import socket
+import threading
 import argparse
 import netifaces
 
@@ -21,16 +26,34 @@ def get_interface():
             return i
     return None
 
+class FileMonitor(FileSystemEventHandler):
+    def __init__(self, time, filepath, socket):
+        self.lastModificationTime = 0
+        self.filepath = filepath
+        self.socket = socket
+
+    def monitor(self):
+        while True:
+            if os.stat(self.filepath).st_mtime != self.lastModificationTime:
+                self.lastModificationTime = os.path.getmtime(self.filepath)
+                s.sendMessage("File was updated")
+
 '''
 Connect to CA, continuously check file for update and send to CA
 @arg port to bind to
 '''
 def dhcp_mode():
+    debug("DHCP mode")
+
+    # Init a socket to connect to the CA when it connects
     s = NetworkManager.Socket('', NetworkManager.DHCP_PORT, server=True, tcp=True)
     s.wait_for_conn()
-    # loop and send updates... simple echo for now
-    s.send_message("Hello")
-    #time.sleep(2)
+
+    monitor = FileMonitor(time.time(), "DHCP/state.txt", s)
+    thread = threading.Thread(target=monitor.monitor)
+    thread.daemon = True
+    thread.start()
+
     data = s.tcp_recv_message(wait=True) # data can be null
     print(data)
 
