@@ -45,10 +45,8 @@ class Socket:
 
         else:
             s.connect((ip, port))
-            print('connect name '+str(s.getsockname()))
             print("[*] Connected to %s Port %s" % (str(ip), str(port)) )
             self.sock = s
-            print('socket name '+str(self.sock.getsockname()))
 
     def kill_conn(self):
         if self.server:
@@ -112,14 +110,12 @@ class Socket:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             print("Error unpacking data [line %d]: %s" % (exc_tb.tb_lineno,str(e)))
 
-        print 'data', data
         return data, addr
 
     def send_message(self, msg, dest=None):
         sock = self.sock
         if self.tcp and self.server:
             sock = self.conn
-        print(self.sock.getsockname())
         sock.settimeout(None)
         length = struct.pack("I", len(msg))
 
@@ -207,7 +203,7 @@ class SecureArp:
         self.sig = c.sign(nonce)
 
     def validate_sig(self, nonce, key):
-        valid = SecurityContext.verify(nonce, self.sig, key.exportKey('DER'))
+        valid = SecurityContext.verify(nonce, self.sig, key)
         return valid
 
     def serialize(self):

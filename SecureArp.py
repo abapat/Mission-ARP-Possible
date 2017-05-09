@@ -68,7 +68,6 @@ def initialize_keys():
         with open("KEYS/"+ip,"w") as keyFile:
             keyFile.write(str(map[ip]))
     debug("Done")
-    #print d
 
 def create_key_manager():
     with open("DHCP/state.txt","r") as stateFile:
@@ -95,15 +94,16 @@ def ca_mode(dhcp_ip):
 
     monitor = FileMonitor(time.time(), FILEPATH, key_manager)
 
-    server_thread = threading.Thread(target=monitor.monitor())
+    server_thread = threading.Thread(target=monitor.monitor)
     # Dont exit the server thread when the main thread terminates
-    server_thread.daemon = False
+    server_thread.daemon = True
     server_thread.start()
+    ca_sock = NetworkManager.Socket(CA_IP, NetworkManager.CA_PORT, server=True)
 
     while True:
-        query_size = ca_sock.udp_recv_message(INT_SIZE)
+        query_size, addr = ca_sock.udp_recv_message(INT_SIZE, wait=True)
         if query_size:
-            print("[*] Received update from host" + "FIX MEEEEEE")
+            print("[*] Received update from host", str(addr[0]))
             ca_handle_query(key_manager, query_size, ca_sock) # handles query and kills conn
 
 def read_keys(my_ip):
@@ -130,9 +130,6 @@ def host_mode(query_ip):
 
     my_mac = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
     nonce = None
-
-    print("Pub Key:")
-    print keys.publicKey.exportKey()
 
     sock = NetworkManager.Socket(my_ip, NetworkManager.ARP_PORT, server=True)
     if query_ip:
@@ -190,21 +187,13 @@ def host_mode(query_ip):
 
 def get_public_key(sock, ip):
     ca_sock = NetworkManager.Socket(CA_IP, NetworkManager.CA_PORT)
-    print('asssss'+ str(ca_sock.sock.getsockname()))
-
-    print("get_public_key enter")
-
     query = {QUERY_TYPE: GET_QUERY_TYPE, IP_QUERY: ip}
+    ca_sock.send_message(struct.pack("!I", len(query)), (CA_IP, NetworkManager.CA_PORT))
     ca_sock.send_message(str(query), (CA_IP, NetworkManager.CA_PORT))
-    print("get_public_key asdfasdf")
-
     data, addr = ca_sock.udp_recv_message(INT_SIZE, wait=True)
-    print(data)
     query_size = int(struct.unpack("!I", data)[0])
-    print("get_public_key vvvvnvnvn")
 
     data, addr = ca_sock.udp_recv_message(query_size, wait=True)
-    print("get_public_key exit")
     return data
 
 '''
@@ -221,18 +210,18 @@ Handle a public key query from a node
 @arg socket to node - UDP
 '''
 def ca_handle_query(key_manager, query_size, ca_sock):
-    query_size = int(query_size)
+    query_size = int(struct.unpack("I", query_size)[0])
     data, addr = ca_sock.udp_recv_message(query_size, True)
     query = eval(data)
     query_type = query[QUERY_TYPE]
     if query_type == GET_QUERY_TYPE:
-        ip = query[PUBLIC_KEY_QUERY]
+        ip = query[IP_QUERY]
     public_key = key_manager.get(ip)
 
     dest = (addr[0], NetworkManager.ARP_PORT)
     # Send public key size first and then public key
-    ca_sock.send_message(str(public_key))
-    ca_sock.send_message(public_key)
+    ca_sock.send_message(struct.pack("!I", len(public_key)), dest=addr)
+    ca_sock.send_message(public_key, dest=addr)
 
 # secure_arp.py [-d] [-c ip] [-q ip]
 def parse_args():
