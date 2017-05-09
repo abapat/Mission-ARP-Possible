@@ -34,7 +34,7 @@ def startNetwork():
 
     info('** Starting the network\n')
     global net
-    net = MiniNExT(topo, controller=OVSController)
+    net = MiniNExT(topo, controller=OVSController, autoSetMacs = True)
     net.start()
 
     info('** Dumping host connections\n')

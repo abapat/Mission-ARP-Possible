@@ -9,7 +9,7 @@ from mininext.services.quagga import QuaggaService
 
 from collections import namedtuple
 
-QuaggaHost = namedtuple("QuaggaHost", "name ip loIP")
+QuaggaHost = namedtuple("QuaggaHost", "name ip loIP mac")
 net = None
 
 
@@ -54,6 +54,7 @@ class QuaggaTopo(Topo):
             # Create an instance of a host, called a quaggaContainer
             quaggaContainer = self.addHost(name=host.name,
                                            ip=host.ip,
+                                           mac=host.mac,
                                            hostname=host.name,
                                            privateLogDir=True,
                                            privateRunDir=True,
