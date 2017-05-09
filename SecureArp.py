@@ -30,9 +30,6 @@ NONCE = "NONCE"
 CA_IP = "192.168.1.1"
 SIG_SIZE = 256
 
-MY_MAC = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
-MY_IP = netifaces.ifaddresses(get_interface())[netifaces.AF_INET][0]['addr']
-arp_table = ARPTable.ARPTable()
 
 def debug(s):
     if DEBUG:
@@ -43,6 +40,11 @@ def get_interface():
         if i != "lo":
             return i
     return None
+
+
+MY_MAC = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
+MY_IP = netifaces.ifaddresses(get_interface())[netifaces.AF_INET][0]['addr']
+arp_table = ARPTable.ARPTable()
 
 class FileMonitor():
     def __init__(self, time, filepath, manager):
@@ -135,7 +137,7 @@ def read_keys(ip_addr):
     keys_map = ast.literal_eval(keys_str)
     keys = SecurityContext.AsymmetricCrypto(publicKey=keys_map["public"], 
         privateKey=keys_map["private"])
-    return key
+    return keys
 
 
 def send_data_link(data, destmac):
@@ -143,8 +145,7 @@ def send_data_link(data, destmac):
     sendp(p)
 
 def handle_arp_request(pkt):
-    if pkt[ARP].hwdst == MY_MAC and 
-        pkt[ARP].pdst == MY_IP:
+    if pkt[ARP].hwdst == MY_MAC and pkt[ARP].pdst == MY_IP:
         desired_ip = arp_table.psrc
         desired_mac = arp_table.hwsrc
         if arp_table.has(desired_ip):
@@ -157,6 +158,7 @@ def print_packet(pkt):
         print pkt[Padding].show()
 
 def listen_data():
+    print "[*] Listening For Messages"
     sniff(prn=print_packet, store=0)
 
 '''
@@ -187,10 +189,13 @@ def host_mode(query_ip, verify_on):
     arp_thread.daemon = True
     arp_thread.start()
 
+
+    print("[*] Listening for ARP messages")
+
     while True:
         # if query, respond to it. If response, validate and add to table
-        data, addr = sock.udp_recv_message(NetworkManager.ARP_SIZE, wait=True)
-        debug("Received " + str(len(data)) + " bytes")
+        data, addr = sock.udp_recv_message(NetworkManager.ARP_SIZE)
+        #debug("Received " + str(len(data)) + " bytes")
         if data and addr[0] != MY_IP:
             response_arp = NetworkManager.SecureArp(raw=data)
             query_ip = response_arp.get_query_ip()
@@ -218,15 +223,36 @@ def host_mode(query_ip, verify_on):
                         print("Detected Invalid Response from CA: bad sig!")
                         continue
 
-                if nonce:
+                if verify_on and nonce:
                     # check cache for key or query CA
                     if response_arp.validate_sig(nonce, key):
                         print("[*] Received Valid Response:")
                         response_arp.pkt.show()
-                        send_data_link("This is some test data", response_arp.pkt.hwsrc)
+                        # Update ARP table
+                        handle_arp_request(response_arp.pkt)
                     else:
                         print("[*] Received Invalid Response from %s" % str(addr))
-                # Update ARP table
+                        print("[*] Cannot send a message because ARP response could not be verified")
+                        return
+                else:
+                    # Update ARP table
+                    handle_arp_request(response_arp.pkt)
+
+    send_data_link("This is some test data", arp_table.get(query_ip))
+
+def attacker_mode(ip):
+    # Read keys from file and initialize keys object - (pub,priv)
+    keys = read_keys(MY_IP)
+
+    arp_thread = threading.Thread(target=listen_data)
+    arp_thread.daemon = True
+    arp_thread.start()
+
+    response_arp.create_response(MY_MAC, MY_IP, keys)
+    print("Sending Malicious ARP Update:")
+    response_arp.pkt.show()
+    d = (ip,NetworkManager.ARP_PORT)
+    sock.send_message(response_arp.serialize(), dest=d)
 
 def get_public_key(sock, ip):
     ca_sock = NetworkManager.Socket(CA_IP, NetworkManager.CA_PORT)
@@ -293,7 +319,8 @@ def validate_sig(nonce, sig, public_key):
 # secure_arp.py [-d] [-c ip] [-q ip]
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', action="store_true", help='DHCP server mode')
+    parser.add_argument('-c', action="store_true", help='CA mode')
+    parser.add_argument('-a', action="store_true", help='Malicious Host Mode')
     parser.add_argument('-q', metavar='IP addr', nargs="+", help='Send some data via DL layer')
     res = parser.parse_args()
 
@@ -309,15 +336,22 @@ def parse_args():
             print("Error: Invalid IP supplied: %s\n" % res.q[0])
             sys.exit(1)
 
-    return (res.c,res.q)
+    return (res.c,res.a,res.q)
 
 
 def main():
     args = parse_args()
     if args[0]:
         ca_mode()
+    elif args[1]:
+        attacker_mode()
     else:
-        verify_on = False if args[1][1] == 'insecure' else True
-        host_mode(args[1][0], verify_on)
+        verify_on = True
+        query_ip = None
+        if args[2]:
+            if len(args[2]) == 2:
+                verify_on = False if args[2][1] == 'insecure' else True
+            query_ip = args[2][0]
+        host_mode(query_ip, verify_on)
 if __name__ == '__main__':
     main()
