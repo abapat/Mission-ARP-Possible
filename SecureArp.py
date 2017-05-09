@@ -235,6 +235,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', action="store_true", help='DHCP server mode')
     parser.add_argument('-q', metavar='IP addr', help='Send secure ARP query for an ip')
+    parser.add_argument('-v', metavar='IP addr', \
+            help='Send some data to the specified IP address')
     res = parser.parse_args()
 
 
@@ -250,7 +252,7 @@ def parse_args():
             print("Error: Invalid IP supplied: %s\n" % res.q[0])
             sys.exit(1)
 
-    return (res.c,res.q)
+    return (res.c,res.q,res.t)
 
 
 def main():
