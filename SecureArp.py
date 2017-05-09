@@ -109,9 +109,9 @@ def ca_mode(dhcp_ip):
         query_size, addr = ca_sock.udp_recv_message(INT_SIZE, wait=True)
         if query_size:
             print("[*] Received update from host", str(addr[0]))
-            monitor.lock.acquire()
+            monitor.mutex.acquire()
             ca_handle_query(monitor.key_manager, query_size, ca_sock) # handles query and kills conn
-            monitor.lock.release()
+            monitor.mutex.release()
 
 def read_keys(my_ip):
     keys_str = ""
