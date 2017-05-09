@@ -1,8 +1,6 @@
 '''
 Driver script for running secure ARP protocol
 '''
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
 import NetworkManager
 import SecurityContext
@@ -34,7 +32,7 @@ def get_interface():
             return i
     return None
 
-class FileMonitor(FileSystemEventHandler):
+class FileMonitor():
     def __init__(self, time, filepath, manager):
         self.lastModificationTime = 0
         self.filepath = filepath
@@ -107,15 +105,26 @@ def ca_mode(dhcp_ip):
             print("[*] Received update from host" + "FIX MEEEEEE")
             ca_handle_query(key_manager, ca_sock) # handles query and kills conn
 
+def read_keys(my_ip):
+    keys_str = ""
+    with open("KEYS/"+my_ip, "r") as keysFile:
+        for line in keysFile:
+            keys_str+=line
+    ast.literal_eval(keys_str)
+    return (keys_str["public"], keys_str["private"])
+
 '''
 First sends a query, if any. Then listens on port for ARP queries and responds to them
 @arg query_ip the ip to send an ARP query for
 '''
-def host_mode(query_ip, keys):
+def host_mode(query_ip):
     # Assuming host's IP and public key already registered with CA
     # Send query, if any. Otherwise, listen on port to respond
 
     my_ip = netifaces.ifaddresses(get_interface())[netifaces.AF_INET][0]['addr']
+    # Read keys from file and initialize keys object - (pub,priv)
+    keys = read_keys(my_ip)
+
     my_mac = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
     nonce = None
 
@@ -132,6 +141,7 @@ def host_mode(query_ip, keys):
             debug("Broadcasting ARP query")
             NetworkManager.broadcast_packet(arp_query.serialize(), NetworkManager.ARP_PORT)
 
+    key_manager = KeyManager.KeyManager()
     print("[*] Listening for ARP messages")
     while True:
         # if query, respond to it. If response, validate and add to table
@@ -158,6 +168,14 @@ def host_mode(query_ip, keys):
                     debug("Key received:")
                     print(key.exportKey())
                 '''
+                debug(addr)
+                sender_ip = addr[0]
+                key = None
+                if key_manager.has(sender_ip):
+                    key = key_manager.get(sender_ip)
+                else:
+                    key = get_public_key(sock, sender_ip)
+
                 if nonce:
                     # check cache for key or query CA
                     if response_arp.validate_sig(nonce, key):
@@ -168,11 +186,18 @@ def host_mode(query_ip, keys):
                 # Update ARP table
 
 def get_public_key(sock, ip):
+    print("get_public_key enter")
+
     query = {QUERY_TYPE: GET_QUERY_TYPE, IP_QUERY: ip}
     sock.send_message(str(query), (CA_IP, NetworkManager.CA_PORT))
-    data, addr = sock.udp_recv_message(INT_SIZE, True)
+    print("get_public_key asdfasdf")
+
+    data, addr = sock.udp_recv_message(INT_SIZE, wait=True)
     query_size = int(struct.unpack("!I", data)[0])
-    data, addr = sock.udp_recv_message(query_size, True)
+    print("get_public_key vvvvnvnvn")
+
+    data, addr = sock.udp_recv_message(query_size, wait=True)
+    print("get_public_key exit")
     return data
 
 '''
@@ -229,8 +254,6 @@ def main():
     if args[0]:
         ca_mode(args[0])
     else:
-        c = SecurityContext.AsymmetricCrypto()
-        keys = (c.publicKey,c.privateKey)
-        host_mode(args[1], keys)
+        host_mode(args[1])
 if __name__ == '__main__':
     main()

@@ -15,6 +15,9 @@ class KeyManager:
         for k, v in new_table.items():
             self.table[k] = v
 
+    def has(self, ip):
+        return ip in self.table
+
     def delete(self, ip):
         del self.table[ip]
 
