@@ -36,15 +36,15 @@ class QuaggaTopo(Topo):
         # List of Quagga host configs
         quaggaHosts = []
         quaggaHosts.append(QuaggaHost(name='R1', ip='192.168.1.2/24',
-                                      loIP='127.0.0.1'))
+                                      loIP='127.0.0.1', mac = 'aa:aa:aa:aa:aa:aa'))
         quaggaHosts.append(QuaggaHost(name='H1', ip='192.168.1.1/26',
-                                      loIP='127.0.0.1'))
+                                      loIP='127.0.0.1', mac = 'bb:bb:bb:bb:bb:bb'))
         quaggaHosts.append(QuaggaHost(name='H2', ip='192.168.1.64/26',
-                                      loIP='127.0.0.1'))
+                                      loIP='127.0.0.1', mac = 'cc:cc:cc:cc:cc:cc'))
         quaggaHosts.append(QuaggaHost(name='H3', ip='192.168.1.128/26',
-                                      loIP='127.0.0.1'))
+                                      loIP='127.0.0.1', mac = 'dd:dd:dd:dd:dd:dd'))
         quaggaHosts.append(QuaggaHost(name='H4', ip='192.168.1.192/26',
-                                      loIP='127.0.0.1'))
+                                      loIP='127.0.0.1', mac = 'ee:ee:ee:ee:ee:ee'))
 
         hostDict = dict()
 
