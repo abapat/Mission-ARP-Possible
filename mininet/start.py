@@ -34,39 +34,48 @@ def startNetwork():
 
     info('** Starting the network\n')
     global net
-    net = MiniNExT(topo, controller=OVSController, autoSetMacs = True)
+    net = MiniNExT(topo, controller=OVSController, autoSetMacs=True)
     net.start()
 
     info('** Dumping host connections\n')
     dumpNodeConnections(net.hosts)
 
-    # R1: Configure IP forwarding 
-    #net['R1'].cmd('sysctl -w net.ipv4.ip_forward=1')
+    # net['R1'].setIP('192.168.1.65', prefixLen = 24, intf = 'R1-eth1')
+    # net['R1'].setIP('192.168.1.129', prefixLen = 24, intf = 'R1-eth2')
+    # net['R1'].setIP('192.168.1.193', prefixLen = 24, intf = 'R1-eth3')
 
-    net['R1'].setIP('192.168.1.65', prefixLen = 24, intf = 'R1-eth1')
-    net['R1'].setIP('192.168.1.129', prefixLen = 24, intf = 'R1-eth2')
-    net['R1'].setIP('192.168.1.193', prefixLen = 24, intf = 'R1-eth3')
+    # net['S1'].setIP('192.168.1.65', prefixLen = 24, intf = 'S1-eth1')
+    # net['S1'].setIP('192.168.1.129', prefixLen = 24, intf = 'S1-eth2')
+    # net['S1'].setIP('192.168.1.193', prefixLen = 24, intf = 'S1-eth3')
 
     # H1: Add static routes
-    net['H1'].cmd('ip route add default via 192.168.1.2 dev H1-eth0')
+    # net['H1'].cmd('ip route add default via 192.168.1.2 dev H1-eth0')
 
     # H2: Add static routes
-    net['H2'].cmd('ip route add default via 192.168.1.65 dev H2-eth0')
+    # net['H2'].cmd('ip route add default via 192.168.1.65 dev H2-eth0')
 
     # H3: Add static routes
-    net['H3'].cmd('ip route add default via 192.168.1.129 dev H3-eth0')
+    # net['H3'].cmd('ip route add default via 192.168.1.129 dev H3-eth0')
 
     # H4: Add static routes
-    net['H4'].cmd('ip route add default via 192.168.1.193 dev H4-eth0')
+    # net['H4'].cmd('ip route add default via 192.168.1.193 dev H4-eth0')
 
     # R1: Add static routes
-    net['R1'].cmd('ip route add 192.168.1.1 via 192.168.1.2 dev R1-eth0')
-    net['R1'].cmd('ip route add 192.168.1.64 via 192.168.1.65 dev R1-eth1')
-    net['R1'].cmd('ip route add 192.168.1.128 via 192.168.1.129 dev R1-eth2')
-    net['R1'].cmd('ip route add 192.168.1.192 via 192.168.1.193 dev R1-eth3')
+    # net['R1'].cmd('ip route add 192.168.1.1/26 via 192.168.1.2 dev R1-eth0')
+    # net['R1'].cmd('ip route add 192.168.1.64/26 via 192.168.1.65 dev R1-eth1')
+    # net['R1'].cmd('ip route add 192.168.1.128/26 via 192.168.1.129 dev R1-eth2')
+    # net['R1'].cmd('ip route add 192.168.1.192/26 via 192.168.1.193 dev R1-eth3')
+
+    # net['S1'].cmd('ip route add 192.168.1.1 via 192.168.1.2 dev S1-eth0')
+    # net['S1'].cmd('ip route add 192.168.1.64 via 192.168.1.65 dev S1-eth1')
+    # net['S1'].cmd('ip route add 192.168.1.128 via 192.168.1.129 dev S1-eth2')
+    # net['S1'].cmd('ip route add 192.168.1.192 via 192.168.1.193 dev S1-eth3')
+
+    # S1: Configure IP forwarding 
+    # net['S1'].cmd('sysctl -w net.ipv4.ip_forward=1')
 
     info('** Testing network connectivity\n')
-    net.ping(net.hosts)
+    # net.ping(net.hosts)
 
     info('** Dumping host processes\n')
     for host in net.hosts:

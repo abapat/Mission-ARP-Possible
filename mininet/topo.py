@@ -35,7 +35,18 @@ class QuaggaTopo(Topo):
 
         # List of Quagga host configs
         quaggaHosts = []
-        quaggaHosts.append(QuaggaHost(name='R1', ip='192.168.1.2/24',
+        # quaggaHosts.append(QuaggaHost(name='S1', ip='192.168.1.2/24',
+        #                               loIP='127.0.0.1', mac = 'aa:aa:aa:aa:aa:aa'))
+        # quaggaHosts.append(QuaggaHost(name='H1', ip='192.168.1.1/26',
+        #                               loIP='127.0.0.1', mac = 'bb:bb:bb:bb:bb:bb'))
+        # quaggaHosts.append(QuaggaHost(name='H2', ip='192.168.1.64/26',
+        #                               loIP='127.0.0.1', mac = 'cc:cc:cc:cc:cc:cc'))
+        # quaggaHosts.append(QuaggaHost(name='H3', ip='192.168.1.128/26',
+        #                               loIP='127.0.0.1', mac = 'dd:dd:dd:dd:dd:dd'))
+        # quaggaHosts.append(QuaggaHost(name='H4', ip='192.168.1.192/26',
+        #                               loIP='127.0.0.1', mac = 'ee:ee:ee:ee:ee:ee'))
+
+        quaggaHosts.append(QuaggaHost(name='S1', ip='192.168.1.2/24',
                                       loIP='127.0.0.1', mac = 'aa:aa:aa:aa:aa:aa'))
         quaggaHosts.append(QuaggaHost(name='H1', ip='192.168.1.1/24',
                                       loIP='127.0.0.1', mac = 'bb:bb:bb:bb:bb:bb'))
@@ -51,8 +62,9 @@ class QuaggaTopo(Topo):
         # Setup each Quagga router, add a link between it
         for host in quaggaHosts:
 
-            # Create an instance of a host, called a quaggaContainer
-            quaggaContainer = self.addHost(name=host.name,
+            if host.name == 'S1':
+              # Create an instance of a host, called a quaggaContainer
+              quaggaContainer = self.addSwitch(name=host.name,
                                            ip=host.ip,
                                            mac=host.mac,
                                            hostname=host.name,
@@ -61,6 +73,17 @@ class QuaggaTopo(Topo):
                                            inMountNamespace=True,
                                            inPIDNamespace=True,
                                            inUTSNamespace=True)
+            else:
+              # Create an instance of a host, called a quaggaContainer
+              quaggaContainer = self.addHost(name=host.name,
+                                             ip=host.ip,
+                                             mac=host.mac,
+                                             hostname=host.name,
+                                             privateLogDir=True,
+                                             privateRunDir=True,
+                                             inMountNamespace=True,
+                                             inPIDNamespace=True,
+                                             inUTSNamespace=True)
 
             hostDict[host.name] = quaggaContainer
 
@@ -73,11 +96,11 @@ class QuaggaTopo(Topo):
             self.addNodeService(node=host.name, service=quaggaSvc,
                                 nodeConfig=quaggaSvcConfig)
 
-        # H1 <-> R1
-        self.addLink(hostDict["R1"], hostDict["H1"])
+        # H1 <-> S1
+        self.addLink(hostDict["S1"], hostDict["H1"])
         # R1 <-> H2
-        self.addLink(hostDict["R1"], hostDict["H2"])
-        # R1 <-> H3
-        self.addLink(hostDict["R1"], hostDict["H3"])
-        # R1 <-> H4
-        self.addLink(hostDict["R1"], hostDict["H4"])
+        self.addLink(hostDict["S1"], hostDict["H2"])
+        # S1 <-> H3
+        self.addLink(hostDict["S1"], hostDict["H3"])
+        # S1 <-> H4
+        self.addLink(hostDict["S1"], hostDict["H4"])
