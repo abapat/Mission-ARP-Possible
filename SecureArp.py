@@ -146,9 +146,12 @@ def handle_arp_request(pkt):
         else:
             arp_table.add(desired_ip, desired_mac)
 
-def listen_arp_requests():
-    print("[*] Listening for ARP messages")
-    sniff(filter="arp", prn=handle_arp_request, store=0)
+def print_packet(pkt):
+    if Padding in pkt:
+        print pkt[Padding].show()
+        
+def listen_data():
+    sniff(prn=print_packet, store=0)
 
 '''
 First sends a query, if any. Then listens on port for ARP queries and responds to them
@@ -173,8 +176,9 @@ def host_mode(query_ip):
             debug("Broadcasting ARP query")
             NetworkManager.broadcast_packet(arp_query.serialize(), NetworkManager.ARP_PORT)
     key_manager = KeyManager.KeyManager()
+    print("[*] Listening for ARP messages")
 
-    arp_thread = threading.Thread(target=listen_arp_requests)
+    arp_thread = threading.Thread(target=listen_data)
     arp_thread.daemon = True
     arp_thread.start()
 
@@ -210,13 +214,18 @@ def host_mode(query_ip):
                         continue
 
                 if nonce:
-                    # check cache for key or query CA
-                    if response_arp.validate_sig(nonce, key):
-                        print("[*] Received Valid Response:")
-                        response_arp.pkt.show()
+                    if verify_on:
+                        # check cache for key or query CA
+                        if response_arp.validate_sig(nonce, key):
+                            print("[*] Received Valid Response:")
+                            response_arp.pkt.show()
+                            # Update ARP table
+                            handle_arp_request(response_arp.pkt)
+                        else:
+                            print("[*] Received Invalid Response from %s" % str(addr))
                     else:
-                        print("[*] Received Invalid Response from %s" % str(addr))
-                # Update ARP table
+                        # Update ARP table
+                        handle_arp_request(response_arp.pkt)
 
 def get_public_key(sock, ip):
     ca_sock = NetworkManager.Socket(CA_IP, NetworkManager.CA_PORT)
