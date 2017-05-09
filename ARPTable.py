@@ -17,5 +17,8 @@ class ARPTable:
     def delete(self, ip):
     	del self.table[ip]
 
+    def has(self, ip):
+        return ip in self.table
+
     def __str__(self):
     	return str(self.table)

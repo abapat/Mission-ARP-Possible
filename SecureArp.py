@@ -13,6 +13,9 @@ import argparse
 import netifaces
 import KeyManager
 import struct
+import uuid
+import ARPTable
+from scapy.all import *
 
 from threading import Lock
 from scapy.all import *
@@ -23,7 +26,13 @@ INT_SIZE = 4
 QUERY_TYPE = 'QueryType'
 GET_QUERY_TYPE = 'GET'
 IP_QUERY = 'IP'
+NONCE = "NONCE"
 CA_IP = "192.168.1.1"
+SIG_SIZE = 256
+
+MY_MAC = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
+MY_IP = netifaces.ifaddresses(get_interface())[netifaces.AF_INET][0]['addr']
+arp_table = ARPTable.ARPTable()
 
 def debug(s):
     if DEBUG:
@@ -86,7 +95,7 @@ Connect to DHCP server and receive updates
 Listen on a port for queries
 @arg ip of DHCP server
 '''
-def ca_mode(dhcp_ip):
+def ca_mode():
 
     FILEPATH = "DHCP/state.txt"
 
@@ -106,30 +115,49 @@ def ca_mode(dhcp_ip):
     server_thread.start()
     ca_sock = NetworkManager.Socket(CA_IP, NetworkManager.CA_PORT, server=True)
 
+    my_ip = netifaces.ifaddresses(get_interface())[netifaces.AF_INET][0]['addr']
+    # Read keys from file and initialize keys object - (pub,priv)
+    keys = read_keys(my_ip)
+
     while True:
         query_size, addr = ca_sock.udp_recv_message(INT_SIZE, wait=True)
         if query_size:
             print("[*] Received update from host", str(addr[0]))
             monitor.mutex.acquire()
-            ca_handle_query(monitor.manager, query_size, ca_sock) # handles query and kills conn
+            ca_handle_query(monitor.manager, query_size, ca_sock, keys) # handles query and kills conn
             monitor.mutex.release()
 
-def read_keys(my_ip):
+def read_keys(ip_addr):
     keys_str = ""
-    with open("KEYS/"+my_ip, "r") as keysFile:
+    with open("KEYS/"+ip_addr, "r") as keysFile:
         for line in keysFile:
             keys_str+=line
     keys_map = ast.literal_eval(keys_str)
     keys = SecurityContext.AsymmetricCrypto(publicKey=keys_map["public"], 
         privateKey=keys_map["private"])
-    return keys
+    return key
 
-def getMac():
-    return netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
 
 def send_data_link(data, destmac):
-    p = Ether(dst=destmac,src=getMac())/Raw(load=data)
+    p = Ether(dst=destmac,src=getMac())/ARP()/Raw(load=data)
     sendp(p)
+
+def handle_arp_request(pkt):
+    if pkt[ARP].hwdst == MY_MAC and 
+        pkt[ARP].pdst == MY_IP:
+        desired_ip = arp_table.psrc
+        desired_mac = arp_table.hwsrc
+        if arp_table.has(desired_ip):
+            arp_table.update(desired_ip, desired_mac)
+        else:
+            arp_table.add(desired_ip, desired_mac)
+
+def print_packet(pkt):
+    if Padding in pkt:
+        print pkt[Padding].show()
+
+def listen_data():
+    sniff(prn=print_packet, store=0)
 
 '''
 First sends a query, if any. Then listens on port for ARP queries and responds to them
@@ -139,30 +167,31 @@ def host_mode(query_ip, verify_on):
     # Assuming host's IP and public key already registered with CA
     # Send query, if any. Otherwise, listen on port to respond
 
-    my_ip = netifaces.ifaddresses(get_interface())[netifaces.AF_INET][0]['addr']
     # Read keys from file and initialize keys object - (pub,priv)
-    keys = read_keys(my_ip)
+    keys = read_keys(MY_IP)
 
-    my_mac = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
     nonce = None
 
-    sock = NetworkManager.Socket(my_ip, NetworkManager.ARP_PORT, server=True)
+    sock = NetworkManager.Socket(MY_IP, NetworkManager.ARP_PORT, server=True)
     if query_ip:
         arp_query = NetworkManager.SecureArp()
-        nonce = arp_query.create_query(my_mac, my_ip, query_ip)
+        nonce = arp_query.create_query(MY_MAC, MY_IP, query_ip)
         if not nonce:
             print("Error: Couldnt create ARP query for ip %s" % str(query_ip))
         else:
             debug("Broadcasting ARP query")
             NetworkManager.broadcast_packet(arp_query.serialize(), NetworkManager.ARP_PORT)
-
     key_manager = KeyManager.KeyManager()
-    print("[*] Listening for ARP messages")
+
+    arp_thread = threading.Thread(target=listen_data)
+    arp_thread.daemon = True
+    arp_thread.start()
+
     while True:
         # if query, respond to it. If response, validate and add to table
         data, addr = sock.udp_recv_message(NetworkManager.ARP_SIZE, wait=True)
         debug("Received " + str(len(data)) + " bytes")
-        if data and addr[0] != my_ip:
+        if data and addr[0] != MY_IP:
             response_arp = NetworkManager.SecureArp(raw=data)
             query_ip = response_arp.get_query_ip()
 
@@ -170,14 +199,14 @@ def host_mode(query_ip, verify_on):
                 print("[*] Received Query from %s" % str(addr))
                 response_arp.pkt.show()
 
-                if query_ip == my_ip:
-                    response_arp.create_response(my_mac, my_ip, keys)
+                if query_ip == MY_IP:
+                    response_arp.create_response(MY_MAC, MY_IP, keys)
                     print("Sending Response:")
                     response_arp.pkt.show()
                     d = (addr[0],NetworkManager.ARP_PORT)
                     sock.send_message(response_arp.serialize(), dest=d)
             else:
-                # TODO check cache for key, or send query
+                # check cache for key, or send query if not there
                 debug(addr)
                 sender_ip = addr[0]
                 key = None
@@ -185,6 +214,9 @@ def host_mode(query_ip, verify_on):
                     key = key_manager.get(sender_ip)
                 else:
                     key = get_public_key(sock, sender_ip)
+                    if not key:
+                        print("Detected Invalid Response from CA: bad sig!")
+                        continue
 
                 if nonce:
                     # check cache for key or query CA
@@ -198,14 +230,47 @@ def host_mode(query_ip, verify_on):
 
 def get_public_key(sock, ip):
     ca_sock = NetworkManager.Socket(CA_IP, NetworkManager.CA_PORT)
-    query = {QUERY_TYPE: GET_QUERY_TYPE, IP_QUERY: ip}
+    nonce = str(uuid.uuid4())
+    debug("Generated nonce for CA: " + nonce)
+    query = {QUERY_TYPE: GET_QUERY_TYPE, IP_QUERY: ip, NONCE: nonce}
+
     ca_sock.send_message(struct.pack("!I", len(query)), (CA_IP, NetworkManager.CA_PORT))
     ca_sock.send_message(str(query), (CA_IP, NetworkManager.CA_PORT))
     data, addr = ca_sock.udp_recv_message(INT_SIZE, wait=True)
     query_size = int(struct.unpack("!I", data)[0])
 
     data, addr = ca_sock.udp_recv_message(query_size, wait=True)
-    return data
+    debug("Received " + str(len(data)) + " bytes")
+    ca_keys = read_keys(CA_IP)
+
+    sig = data[:SIG_SIZE]
+    public_key = data[SIG_SIZE:]
+    if not validate_sig(nonce, sig, ca_keys.publicKey.exportKey('DER')):
+        return None
+    debug("Validated Sig from CA")
+    return public_key
+
+'''
+Handle a public key query from a node
+@arg socket to node - UDP
+'''
+def ca_handle_query(key_manager, query_size, ca_sock, keys):
+    query_size = int(struct.unpack("I", query_size)[0])
+    data, addr = ca_sock.udp_recv_message(query_size, True)
+    query = eval(data)
+    query_type = query[QUERY_TYPE]
+    if query_type == GET_QUERY_TYPE:
+        ip = query[IP_QUERY]
+    nonce = query[NONCE]
+    public_key = key_manager.get(ip)
+
+    sig = create_sig(nonce, keys)
+    payload = sig + public_key
+    dest = (addr[0], NetworkManager.ARP_PORT)
+    # Send public key size first and then public key
+    debug("Sending payload len " + str(len(payload)))
+    ca_sock.send_message(struct.pack("!I", len(payload)), dest=addr)
+    ca_sock.send_message(payload, dest=addr)
 
 '''
 Add ip-public key mapping to table
@@ -216,23 +281,14 @@ def ca_handle_dhcp(key_manager, data, dhcp_sock):
     key_map = eval(data)
     key_manager.update(key_map)
 
-'''
-Handle a public key query from a node
-@arg socket to node - UDP
-'''
-def ca_handle_query(key_manager, query_size, ca_sock):
-    query_size = int(struct.unpack("I", query_size)[0])
-    data, addr = ca_sock.udp_recv_message(query_size, True)
-    query = eval(data)
-    query_type = query[QUERY_TYPE]
-    if query_type == GET_QUERY_TYPE:
-        ip = query[IP_QUERY]
-    public_key = key_manager.get(ip)
+def create_sig(nonce, keys):
+    debug("Signing nonce " + nonce)
+    sig = keys.sign(nonce)
+    debug("Signed nonce, len=" + str(len(sig)))
+    return sig
 
-    dest = (addr[0], NetworkManager.ARP_PORT)
-    # Send public key size first and then public key
-    ca_sock.send_message(struct.pack("!I", len(public_key)), dest=addr)
-    ca_sock.send_message(public_key, dest=addr)
+def validate_sig(nonce, sig, public_key):
+    return SecurityContext.verify(nonce, sig, public_key)
 
 # secure_arp.py [-d] [-c ip] [-q ip]
 def parse_args():
@@ -259,7 +315,7 @@ def parse_args():
 def main():
     args = parse_args()
     if args[0]:
-        ca_mode(args[0])
+        ca_mode()
     else:
         verify_on = False if args[1][1] == 'insecure' else True
         host_mode(args[1][0], verify_on)
