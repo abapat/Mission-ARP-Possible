@@ -110,7 +110,7 @@ def ca_mode(dhcp_ip):
         if query_size:
             print("[*] Received update from host", str(addr[0]))
             monitor.mutex.acquire()
-            ca_handle_query(monitor.key_manager, query_size, ca_sock) # handles query and kills conn
+            ca_handle_query(monitor.manager, query_size, ca_sock) # handles query and kills conn
             monitor.mutex.release()
 
 def read_keys(my_ip):
