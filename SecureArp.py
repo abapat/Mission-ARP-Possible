@@ -8,6 +8,7 @@ import NetworkManager
 import SecurityContext
 
 import os
+import ast
 import time
 import socket
 import threading
@@ -30,37 +31,33 @@ def get_interface():
     return None
 
 class FileMonitor(FileSystemEventHandler):
-    def __init__(self, time, filepath, socket):
+    def __init__(self, time, filepath, manager):
         self.lastModificationTime = 0
         self.filepath = filepath
-        self.socket = socket
+        self.manager = manager
 
     def monitor(self):
         while True:
             if os.stat(self.filepath).st_mtime != self.lastModificationTime:
                 self.lastModificationTime = os.path.getmtime(self.filepath)
-                self.socket.send_message(str({"hi":"hello"})
+                #self.manager.update(#TODO)
 
 def initialize_keys():
-    pass
+    network_ips = ["192.168.1.1", "192.168.1.64", "192.168.1.128", "192.168.1.192",\
+             "192.168.1.2", "192.168.1.65", "192.168.1.129", "182.168.1.193"]
 
-'''
-Connect to CA, continuously check file for update and send to CA
-@arg port to bind to
-'''
-def dhcp_mode():
-    debug("DHCP mode")
-    FILEPATH = "DHCP/state.txt"
+    with open("DHCP/state.txt", "w") as stateFile:
+        output = ""
+        for ip in network_ips:
+            print ip
+            security = SecurityContext.AsymmetricCrypto()
+            output += str({ip:{"public":security.publicKey.exportKey(),\
+                    "private":security.privateKey.exportKey()}})
 
-    if not os.path.isfile(FILENAME):
-        initialize_keys()
+        stateFile.write(output)
 
-    # Init a socket to connect to the CA when it connects
-    s = NetworkManager.Socket('', NetworkaManager.DHCP_PORT, server=True, tcp=True)
-    s.wait_for_conn()
-
-    monitor = FileMonitor(time.time(), FILENAME, s)
-    monitor.monitor()
+    d = ast.literal_eval(output)
+    print d
 
 '''
 Connect to DHCP server and receive updates
@@ -68,20 +65,25 @@ Listen on a port for queries
 @arg ip of DHCP server
 '''
 def ca_mode(dhcp_ip):
-    # Set up DHCP conn
-    dhcp_sock = NetworkManager.Socket(dhcp_ip, NetworkManager.DHCP_PORT, tcp=True)
 
-    # Listen on DHCP port AND CA port for queries
-    ca_sock = NetworkManager.Socket('', NetworkManager.CA_PORT, server=True)
+    FILEPATH = "DHCP/state.txt"
+
+    if not os.path.isfile(FILEPATH):
+        initialize_keys()
+    else:
+        print "File exists"
+
     # Key manager
-    key_manager = KeyManager()
-    while True:
-        data = dhcp_sock.tcp_recv_message()
-        if data:
-            print("[*] Received update from DHCP")
-            ca_handle_dhcp(key_manager, data, dhcp_sock)
-            print(key_manager)
+    key_manager = KeyManager.KeyManager()
 
+    monitor = FileMonitor(time.time(), FILEPATH, key_manager)
+
+    server_thread = threading.Thread(target=monitor.monitor())
+    # Dont exit the server thread when the main thread terminates
+    server_thread.daemon = False
+    server_thread.start()
+
+    while True:
         if ca_sock.check_for_udp_conn():
             print("[*] Received update from host" + "FIX MEEEEEE")
             ca_handle_query(key_manager, ca_sock) # handles query and kills conn
@@ -160,18 +162,13 @@ def ca_handle_query(key_manager, ca_sock):
 # secure_arp.py [-d] [-c ip] [-q ip]
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-d', action="store_true", help='DHCP server mode')
-    parser.add_argument('-c', metavar='IP addr', help='Certificate Authority Mode')
+    parser.add_argument('-c', action="store_true", help='DHCP server mode')
     parser.add_argument('-q', metavar='IP addr', help='Send secure ARP query for an ip')
     res = parser.parse_args()
 
-    if res.c and res.d:
-        print("Error: cannot be in CA mode and DHCP mode!")
-        parser.print_help()
-        sys.exit(1)
 
     if res.q:
-        if res.c or res.d:
+        if res.c:
             print("Error: cannot be send query as DHCP server or Certificate Authority!")
             parser.print_help()
             sys.exit(1)
@@ -182,24 +179,15 @@ def parse_args():
             print("Error: Invalid IP supplied: %s\n" % res.q[0])
             sys.exit(1)
 
-    if res.c:
-        try:
-            socket.inet_aton(res.c)
-        except socket.error:
-            print("Error: Invalid IP supplied: %s\n" % res.c)
-            sys.exit(1)
-
-    return (res.d,res.c,res.q)
+    return (res.c,res.q)
 
 
 def main():
     args = parse_args()
     if args[0]:
-        dhcp_mode()
-    elif args[1]:
-        ca_mode(args[1])
+        ca_mode(args[0])
     else:
-        host_mode(args[2])
+        host_mode(args[1])
 
 if __name__ == '__main__':
     main()
