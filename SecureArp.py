@@ -14,6 +14,8 @@ import netifaces
 import KeyManager
 import struct
 
+from threading import Lock
+
 DEBUG = True
 
 INT_SIZE = 4
@@ -37,12 +39,15 @@ class FileMonitor():
         self.lastModificationTime = 0
         self.filepath = filepath
         self.manager = manager
+        self.mutex = LOCK()
 
     def monitor(self):
         while True:
             if os.stat(self.filepath).st_mtime != self.lastModificationTime:
                 self.lastModificationTime = os.path.getmtime(self.filepath)
-                #self.manager.update(#TODO)
+                self.mutex.acquire()
+                self.manager = create_key_manager()
+                self.mutex.release()
 
 def initialize_keys():
     network_ips = ["192.168.1.1", "192.168.1.64", "192.168.1.128", "192.168.1.192",\
@@ -104,7 +109,9 @@ def ca_mode(dhcp_ip):
         query_size, addr = ca_sock.udp_recv_message(INT_SIZE, wait=True)
         if query_size:
             print("[*] Received update from host", str(addr[0]))
-            ca_handle_query(key_manager, query_size, ca_sock) # handles query and kills conn
+            monitor.lock.acquire()
+            ca_handle_query(monitor.key_manager, query_size, ca_sock) # handles query and kills conn
+            monitor.lock.release()
 
 def read_keys(my_ip):
     keys_str = ""
