@@ -193,7 +193,7 @@ class SecureArp:
         pad_len = self.sig_size - len(data)
         pad = "X" * pad_len
         data += pad
-        debug("Nonce: " + data)
+        # debug("Nonce: " + data)
         return data
 
     def create_sig(self, keys):

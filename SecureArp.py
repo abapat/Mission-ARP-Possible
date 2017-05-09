@@ -178,12 +178,14 @@ def host_mode(query_ip, verify_on):
     nonce = None
 
     sock = NetworkManager.Socket(MY_IP, NetworkManager.ARP_PORT, server=True)
+    start_time = None
     if query_ip:
         arp_query = NetworkManager.SecureArp()
         nonce = arp_query.create_query(MY_MAC, MY_IP, query_ip)
         if not nonce:
             print("Error: Couldnt create ARP query for ip %s" % str(query_ip))
         else:
+            start_time = time.time()
             debug("Broadcasting ARP query")
             NetworkManager.broadcast_packet(arp_query.serialize(), NetworkManager.ARP_PORT)
     key_manager = KeyManager.KeyManager()
@@ -233,14 +235,17 @@ def host_mode(query_ip, verify_on):
                         nonce = None
                         # Update ARP table
                         handle_arp_request(response_arp.pkt)
+                        print "[*] ARPSec time spent:", str(time.time() - start_time), "seconds"
                     else:
                         print("[*] Received Invalid Response from %s" % str(addr))
                         print("[*] Cannot send a message because ARP response could not be verified")
+                        print "[*] ARPSec time spent:", str(time.time() - start_time), "seconds"
                         return
                 else:
                     # Update ARP table
                     print("[*] WARNING: Update ARP Table insecrely")
                     handle_arp_request(response_arp.pkt)
+                    print "[*] Regular ARP time spent:", str(time.time() - start_time), "seconds"
             if arp_table.has(response_arp.pkt.psrc):
                 print "[*] Sending data to", addr[0], "using MAC", arp_table.get(response_arp.pkt.psrc)
                 send_data_link("Password=CSE534", arp_table.get(response_arp.pkt.psrc))

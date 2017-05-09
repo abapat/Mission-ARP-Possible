@@ -37,24 +37,24 @@ class QuaggaTopo(Topo):
         quaggaHosts = []
         # quaggaHosts.append(QuaggaHost(name='S1', ip='192.168.1.2/24',
         #                               loIP='127.0.0.1', mac = 'aa:aa:aa:aa:aa:aa'))
-        # quaggaHosts.append(QuaggaHost(name='H1', ip='192.168.1.1/26',
+        # quaggaHosts.append(QuaggaHost(name='CA', ip='192.168.1.1/26',
         #                               loIP='127.0.0.1', mac = 'bb:bb:bb:bb:bb:bb'))
         # quaggaHosts.append(QuaggaHost(name='H2', ip='192.168.1.64/26',
         #                               loIP='127.0.0.1', mac = 'cc:cc:cc:cc:cc:cc'))
-        # quaggaHosts.append(QuaggaHost(name='H3', ip='192.168.1.128/26',
+        # quaggaHosts.append(QuaggaHost(name='Target', ip='192.168.1.128/26',
         #                               loIP='127.0.0.1', mac = 'dd:dd:dd:dd:dd:dd'))
         # quaggaHosts.append(QuaggaHost(name='H4', ip='192.168.1.192/26',
         #                               loIP='127.0.0.1', mac = 'ee:ee:ee:ee:ee:ee'))
 
         quaggaHosts.append(QuaggaHost(name='S1', ip='192.168.1.2/24',
                                       loIP='127.0.0.1', mac = 'aa:aa:aa:aa:aa:aa'))
-        quaggaHosts.append(QuaggaHost(name='H1', ip='192.168.1.1/24',
+        quaggaHosts.append(QuaggaHost(name='CA', ip='192.168.1.1/24',
                                       loIP='127.0.0.1', mac = 'bb:bb:bb:bb:bb:bb'))
-        quaggaHosts.append(QuaggaHost(name='H2', ip='192.168.1.64/24',
+        quaggaHosts.append(QuaggaHost(name='Victim', ip='192.168.1.64/24',
                                       loIP='127.0.0.1', mac = 'cc:cc:cc:cc:cc:cc'))
-        quaggaHosts.append(QuaggaHost(name='H3', ip='192.168.1.128/24',
+        quaggaHosts.append(QuaggaHost(name='Target', ip='192.168.1.128/24',
                                       loIP='127.0.0.1', mac = 'dd:dd:dd:dd:dd:dd'))
-        quaggaHosts.append(QuaggaHost(name='H4', ip='192.168.1.192/24',
+        quaggaHosts.append(QuaggaHost(name='Attacker', ip='192.168.1.192/24',
                                       loIP='127.0.0.1', mac = 'ee:ee:ee:ee:ee:ee'))
 
         hostDict = dict()
@@ -96,11 +96,11 @@ class QuaggaTopo(Topo):
             self.addNodeService(node=host.name, service=quaggaSvc,
                                 nodeConfig=quaggaSvcConfig)
 
-        # H1 <-> S1
-        self.addLink(hostDict["S1"], hostDict["H1"])
-        # R1 <-> H2
-        self.addLink(hostDict["S1"], hostDict["H2"])
-        # S1 <-> H3
-        self.addLink(hostDict["S1"], hostDict["H3"])
-        # S1 <-> H4
-        self.addLink(hostDict["S1"], hostDict["H4"])
+        # CA <-> S1
+        self.addLink(hostDict["S1"], hostDict["CA"])
+        # R1 <-> Victim
+        self.addLink(hostDict["S1"], hostDict["Victim"])
+        # S1 <-> Target
+        self.addLink(hostDict["S1"], hostDict["Target"])
+        # S1 <-> Attacker
+        self.addLink(hostDict["S1"], hostDict["Attacker"])
