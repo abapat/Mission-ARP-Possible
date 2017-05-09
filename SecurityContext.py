@@ -76,12 +76,13 @@ class AsymmetricCrypto:
         hasher.update(message)
         return self.sigCipher.sign(hasher)
 
-    def verify(self, data, sig, publicKeyBytes):
-        pubKey = RSA.importKey(publicKeyBytes)
-        signer = PKCS1_v1_5.new(pubKey)
-        digest = SHA256.new()
-        digest.update(data)
-        return signer.verify(digest, sig)
+
+def verify(data, sig, publicKeyBytes):
+    pubKey = RSA.importKey(publicKeyBytes)
+    signer = PKCS1_v1_5.new(pubKey)
+    digest = SHA256.new()
+    digest.update(data)
+    return signer.verify(digest, sig)
 
 '''
     Simple test for encrypting and decrypting a string

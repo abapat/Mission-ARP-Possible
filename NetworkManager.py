@@ -10,12 +10,14 @@ import socket
 import sys
 import time
 import struct
+import uuid
+import SecurityContext
 from scapy.all import *
 
 ARP_PORT = 7777
 DHCP_PORT = 8888
 CA_PORT = 9999
-ARP_SIZE = 36 # need to update for nounce
+ARP_SIZE = 28 + 256# + 294# need to update for nounce
 
 DEBUG = True
 
@@ -87,7 +89,7 @@ class Socket:
         if not data:
             return None
 
-        try:            
+        try:
             size = int(struct.unpack("I", data)[0])
         except Exception, e:
             exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -136,49 +138,44 @@ class SecureArp:
     def __init__(self, raw=None):
         # args = src_mac, src_ip, query_ip
         self.arp_size = 28 # bytes
-        self.sig_size = 512
+        self.sig_size = 256
+        self.nonce_size = 36
         self.valid = False
 
         if raw:
-            self.valid = self.__from_raw(raw)
+            self.__from_raw(raw)
 
     def __from_raw(self, raw):
         arp = raw[:self.arp_size]
         sig = raw[self.arp_size:]
-        
-        if len(sig) > self.sig_size:
-            print("Error in parsing raw Secure Arp Packet")
-            return False
-        
+
+        if len(sig) != self.sig_size:
+            print("Error in parsing raw Secure Arp Packet: bad sig")
+            return
+
         if len(sig) == 0:
             print("Error: No signature in ARP packet")
-            return False # No sig, discard
+            return
 
         try:
             pkt = ARP(arp)
         except Exception, e:
             print("Error in parsing raw Secure Arp Packet: %s" % str(e))
-            return False
+            return
 
         self.pkt = pkt
-        if not self.validate_sig(sig):
-            print("Error: Bad signature in ARP Packet")
-            return False # Bad sig, discard
-        
         self.sig = sig
-
-        return True
 
     def create_query(self, src_mac, src_ip, query_ip):
         try:
             self.pkt = ARP(op=ARP.who_has, hwsrc=src_mac, psrc=src_ip, hwdst='ff:ff:ff:ff:ff:ff', pdst=query_ip)
         except Exception, e:
             print("Error in creating raw Secure Arp Packet: %s" % str(e))
-            return False
+            return None
 
-        self.sig = 'fake_sig' # should be nounce
+        self.sig = self.create_nonce()
         self.valid = True
-        return True
+        return self.sig
 
     def get_query_ip(self):
         if self.pkt.op == ARP.is_at: #if its not a query
@@ -187,32 +184,34 @@ class SecureArp:
         return self.pkt.pdst
 
     # assuming packet already represents valid (parsed) query
-    def create_response(self, src_mac, src_ip):
-        if not self.valid:
-            return False
+    def create_response(self, src_mac, src_ip, keys):
+        self.pkt.op = ARP.is_at
+        self.pkt.hwdst = self.pkt.hwsrc # send back to host who sent query
+        self.pkt.hwsrc = src_mac
+        self.pkt.pdst = self.pkt.psrc
+        self.pkt.psrc = src_ip
+        # response arp is now ready, set sig
+        self.create_sig(keys)
 
-        if self.pkt.op == ARP.who_has: #and self.pkt.pdst == src_ip: # if query is for me TODO fix
-            self.pkt.op = ARP.is_at
-            self.pkt.hwdst = self.pkt.hwsrc # send back to host who sent query
-            self.pkt.hwsrc = src_mac
-            self.pkt.pdst = self.pkt.psrc
-            self.pkt.psrc = src_ip
-            # response arp is now ready, set sig
-            if self.create_sig():
-                return True
+    def create_nonce(self):
+        data = str(uuid.uuid4())
+        pad_len = self.sig_size - len(data)
+        pad = "X" * pad_len
+        data += pad
+        debug("Nonce: " + data)
+        return data
 
-        return False
+    def create_sig(self, keys):
+        nonce = self.sig # nonce + pad, just sign all
+        debug("Signing nonce: " + nonce + " len " + str(len(nonce)))
+        c = SecurityContext.AsymmetricCrypto(publicKey=keys[0].exportKey('DER'), privateKey=keys[1].exportKey('DER'))
+        self.sig = c.sign(nonce)
 
-    def create_sig(self):
-        return "fake_sig"
-
-    def validate_sig(self, sig):
-        return True
+    def validate_sig(self, nonce, key):
+        valid = SecurityContext.verify(nonce, self.sig, key.exportKey('DER'))
+        return valid
 
     def serialize(self):
-        if not self.valid:
-            return None
-
         data = str(self.pkt) # should be hex string
         data += str(self.sig) # needs to be able to send over network
         return data
@@ -229,9 +228,6 @@ def broadcast_packet(data, port):
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     debug("Sending broadcast to %s" % str(port))
     __jank_broadcast(sock,data,port)
-    #sock.sendto(data, ('127.0.0.1', port))
-    #sock.sendto(data, ('192.168.1.255', port))
-
 
 '''
 Simple test for sending and parsing arp packets
