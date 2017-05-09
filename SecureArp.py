@@ -31,6 +31,7 @@ SIG_SIZE = 256
 
 MY_MAC = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
 MY_IP = netifaces.ifaddresses(get_interface())[netifaces.AF_INET][0]['addr']
+arp_table = ARPTable.ARPTable()
 
 def debug(s):
     if DEBUG:
@@ -136,13 +137,18 @@ def read_keys(ip_addr):
     return keys
 
 def handle_arp_request(pkt):
-    if pkt[ARP].hwdst = MY_MAC:
-
+    if pkt[ARP].hwdst == MY_MAC and 
+        pkt[ARP].pdst == MY_IP:
+        desired_ip = arp_table.psrc
+        desired_mac = arp_table.hwsrc
+        if arp_table.has(desired_ip):
+            arp_table.update(desired_ip, desired_mac)
+        else:
+            arp_table.add(desired_ip, desired_mac)
 
 def listen_arp_requests():
     print("[*] Listening for ARP messages")
     sniff(filter="arp", prn=handle_arp_request, store=0)
-
 
 '''
 First sends a query, if any. Then listens on port for ARP queries and responds to them
@@ -166,7 +172,6 @@ def host_mode(query_ip):
         else:
             debug("Broadcasting ARP query")
             NetworkManager.broadcast_packet(arp_query.serialize(), NetworkManager.ARP_PORT)
-    arp_table = ARPTable.ARPTable()
     key_manager = KeyManager.KeyManager()
 
     arp_thread = threading.Thread(target=listen_arp_requests)
