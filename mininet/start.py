@@ -40,6 +40,9 @@ def startNetwork():
     info('** Dumping host connections\n')
     dumpNodeConnections(net.hosts)
 
+    # R1: Configure IP forwarding 
+    #net['R1'].cmd('sysctl -w net.ipv4.ip_forward=1')
+
     net['R1'].setIP('192.168.1.65', prefixLen = 24, intf = 'R1-eth1')
     net['R1'].setIP('192.168.1.129', prefixLen = 24, intf = 'R1-eth2')
     net['R1'].setIP('192.168.1.193', prefixLen = 24, intf = 'R1-eth3')
@@ -57,13 +60,10 @@ def startNetwork():
     net['H4'].cmd('ip route add default via 192.168.1.193 dev H4-eth0')
 
     # R1: Add static routes
-    net['R1'].cmd('ip route add 192.168.1.1/26 via 192.168.1.2 dev R1-eth0')
-    net['R1'].cmd('ip route add 192.168.1.64/26 via 192.168.1.65 dev R1-eth1')
-    net['R1'].cmd('ip route add 192.168.1.128/26 via 192.168.1.129 dev R1-eth2')
-    net['R1'].cmd('ip route add 192.168.1.192/26 via 192.168.1.193 dev R1-eth3')
-
-    # R1: Configure IP forwarding 
-    net['R1'].cmd('sysctl -w net.ipv4.ip_forward=1')
+    net['R1'].cmd('ip route add 192.168.1.1 via 192.168.1.2 dev R1-eth0')
+    net['R1'].cmd('ip route add 192.168.1.64 via 192.168.1.65 dev R1-eth1')
+    net['R1'].cmd('ip route add 192.168.1.128 via 192.168.1.129 dev R1-eth2')
+    net['R1'].cmd('ip route add 192.168.1.192 via 192.168.1.193 dev R1-eth3')
 
     info('** Testing network connectivity\n')
     net.ping(net.hosts)
