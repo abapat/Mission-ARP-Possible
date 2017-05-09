@@ -14,6 +14,8 @@ import netifaces
 import KeyManager
 import struct
 import uuid
+import ARPTable
+from scapy.all import *
 
 from threading import Lock
 
@@ -27,11 +29,8 @@ NONCE = "NONCE"
 CA_IP = "192.168.1.1"
 SIG_SIZE = 256
 
-# TODO delete this method
-def test():
-    sock = NetworkManager.Socket('192.168.1.64', NetworkManager.ARP_PORT, server=True)
-    return get_public_key(sock, '192.168.1.128')
-
+MY_MAC = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
+MY_IP = netifaces.ifaddresses(get_interface())[netifaces.AF_INET][0]['addr']
 
 def debug(s):
     if DEBUG:
@@ -126,15 +125,24 @@ def ca_mode():
             ca_handle_query(monitor.manager, query_size, ca_sock, keys) # handles query and kills conn
             monitor.mutex.release()
 
-def read_keys(my_ip):
+def read_keys(ip_addr):
     keys_str = ""
-    with open("KEYS/"+my_ip, "r") as keysFile:
+    with open("KEYS/"+ip_addr, "r") as keysFile:
         for line in keysFile:
             keys_str+=line
     keys_map = ast.literal_eval(keys_str)
     keys = SecurityContext.AsymmetricCrypto(publicKey=keys_map["public"], 
         privateKey=keys_map["private"])
     return keys
+
+def handle_arp_request(pkt):
+    if pkt[ARP].hwdst = MY_MAC:
+
+
+def listen_arp_requests():
+    print("[*] Listening for ARP messages")
+    sniff(filter="arp", prn=handle_arp_request, store=0)
+
 
 '''
 First sends a query, if any. Then listens on port for ARP queries and responds to them
@@ -144,30 +152,32 @@ def host_mode(query_ip):
     # Assuming host's IP and public key already registered with CA
     # Send query, if any. Otherwise, listen on port to respond
 
-    my_ip = netifaces.ifaddresses(get_interface())[netifaces.AF_INET][0]['addr']
     # Read keys from file and initialize keys object - (pub,priv)
-    keys = read_keys(my_ip)
+    keys = read_keys(MY_IP)
 
-    my_mac = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
     nonce = None
 
-    sock = NetworkManager.Socket(my_ip, NetworkManager.ARP_PORT, server=True)
+    sock = NetworkManager.Socket(MY_IP, NetworkManager.ARP_PORT, server=True)
     if query_ip:
         arp_query = NetworkManager.SecureArp()
-        nonce = arp_query.create_query(my_mac, my_ip, query_ip)
+        nonce = arp_query.create_query(MY_MAC, MY_IP, query_ip)
         if not nonce:
             print("Error: Couldnt create ARP query for ip %s" % str(query_ip))
         else:
             debug("Broadcasting ARP query")
             NetworkManager.broadcast_packet(arp_query.serialize(), NetworkManager.ARP_PORT)
-
+    arp_table = ARPTable.ARPTable()
     key_manager = KeyManager.KeyManager()
-    print("[*] Listening for ARP messages")
+
+    arp_thread = threading.Thread(target=listen_arp_requests)
+    arp_thread.daemon = True
+    arp_thread.start()
+
     while True:
         # if query, respond to it. If response, validate and add to table
         data, addr = sock.udp_recv_message(NetworkManager.ARP_SIZE, wait=True)
         debug("Received " + str(len(data)) + " bytes")
-        if data and addr[0] != my_ip:
+        if data and addr[0] != MY_IP:
             response_arp = NetworkManager.SecureArp(raw=data)
             query_ip = response_arp.get_query_ip()
 
@@ -175,8 +185,8 @@ def host_mode(query_ip):
                 print("[*] Received Query from %s" % str(addr))
                 response_arp.pkt.show()
 
-                if query_ip == my_ip:
-                    response_arp.create_response(my_mac, my_ip, keys)
+                if query_ip == MY_IP:
+                    response_arp.create_response(MY_MAC, MY_IP, keys)
                     print("Sending Response:")
                     response_arp.pkt.show()
                     d = (addr[0],NetworkManager.ARP_PORT)
