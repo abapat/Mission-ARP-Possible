@@ -12,7 +12,7 @@ def getMac():
     my_mac = netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
     return my_mac
 
-p = Ether(dst="ff:ff:ff:ff:ff:ff",src=getMac())/ARP(hwsrc=getMac(),pdst=sys.argv[1])
+p = Ether(dst=sys.argv[1],src=getMac())/ARP(hwsrc=getMac(),pdst=sys.argv[2])/Raw(load="p"*(2048/8))
 
 #p = IP(dst=sys.argv[2])/Ether(dst="ff:ff:ff:ff:ff:ff",src=getMac())/ARP(hwsrc=getMac(),pdst=sys.argv[2])
 print p.show()

@@ -15,6 +15,7 @@ import KeyManager
 import struct
 
 from threading import Lock
+from scapy.all import *
 
 DEBUG = True
 
@@ -123,11 +124,18 @@ def read_keys(my_ip):
         privateKey=keys_map["private"])
     return keys
 
+def getMac():
+    return netifaces.ifaddresses(get_interface())[netifaces.AF_LINK][0]['addr']
+
+def send_data_link(data, destmac):
+    p = Ether(dst=destmac,src=getMac())/Raw(load=data)
+    sendp(p)
+
 '''
 First sends a query, if any. Then listens on port for ARP queries and responds to them
 @arg query_ip the ip to send an ARP query for
 '''
-def host_mode(query_ip):
+def host_mode(query_ip, verify_on):
     # Assuming host's IP and public key already registered with CA
     # Send query, if any. Otherwise, listen on port to respond
 
@@ -170,11 +178,6 @@ def host_mode(query_ip):
                     sock.send_message(response_arp.serialize(), dest=d)
             else:
                 # TODO check cache for key, or send query
-                '''
-                if debug:
-                    debug("Key received:")
-                    print(key.exportKey())
-                '''
                 debug(addr)
                 sender_ip = addr[0]
                 key = None
@@ -188,6 +191,7 @@ def host_mode(query_ip):
                     if response_arp.validate_sig(nonce, key):
                         print("[*] Received Valid Response:")
                         response_arp.pkt.show()
+                        send_data_link("This is some test data", response_arp.pkt.hwsrc)
                     else:
                         print("[*] Received Invalid Response from %s" % str(addr))
                 # Update ARP table
@@ -234,11 +238,8 @@ def ca_handle_query(key_manager, query_size, ca_sock):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', action="store_true", help='DHCP server mode')
-    parser.add_argument('-q', metavar='IP addr', help='Send secure ARP query for an ip')
-    parser.add_argument('-v', metavar='IP addr', \
-            help='Send some data to the specified IP address')
+    parser.add_argument('-q', metavar='IP addr', nargs="+", help='Send some data via DL layer')
     res = parser.parse_args()
-
 
     if res.q:
         if res.c:
@@ -252,7 +253,7 @@ def parse_args():
             print("Error: Invalid IP supplied: %s\n" % res.q[0])
             sys.exit(1)
 
-    return (res.c,res.q,res.t)
+    return (res.c,res.q)
 
 
 def main():
@@ -260,6 +261,7 @@ def main():
     if args[0]:
         ca_mode(args[0])
     else:
-        host_mode(args[1])
+        verify_on = False if args[1][1] == 'insecure' else True
+        host_mode(args[1][0], verify_on)
 if __name__ == '__main__':
     main()
