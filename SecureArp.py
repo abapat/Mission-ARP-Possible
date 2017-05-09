@@ -20,7 +20,7 @@ from scapy.all import *
 from threading import Lock
 from scapy.all import *
 
-DEBUG = True
+DEBUG = False
 
 INT_SIZE = 4
 QUERY_TYPE = 'QueryType'
@@ -145,7 +145,7 @@ def send_data_link(data, destmac):
     sendp(p)
 
 def handle_arp_request(pkt):
-    print pkt.show()
+    # print pkt.show()
     if pkt[ARP].hwdst == MY_MAC and pkt[ARP].pdst == MY_IP:
         desired_ip = pkt[ARP].psrc
         desired_mac = pkt[ARP].hwsrc
@@ -157,7 +157,8 @@ def handle_arp_request(pkt):
 
 def print_packet(pkt):
     if Padding in pkt:
-        print pkt[Padding].show()
+        print 'Received:\n', pkt[Padding].show()
+        # print pkt.show()
 
 def listen_data():
     print "[*] Listening For Messages"
@@ -232,34 +233,25 @@ def host_mode(query_ip, verify_on):
                         nonce = None
                         # Update ARP table
                         handle_arp_request(response_arp.pkt)
-                        print arp_table
                     else:
                         print("[*] Received Invalid Response from %s" % str(addr))
                         print("[*] Cannot send a message because ARP response could not be verified")
                         return
                 else:
                     # Update ARP table
-                    print("[*] Update ARP Table without signature", verify_on, nonce)
+                    print("[*] WARNING: Update ARP Table insecrely")
                     handle_arp_request(response_arp.pkt)
-            print(arp_table)
-            print(addr[0])
             if arp_table.has(response_arp.pkt.psrc):
-                print("[*] Sending data to", addr[0], "using MAC", arp_table.get(response_arp.pkt.psrc))
-                send_data_link("This is some test data", arp_table.get(response_arp.pkt.psrc))
+                print "[*] Sending data to", addr[0], "using MAC", arp_table.get(response_arp.pkt.psrc)
+                send_data_link("Password=CSE534", arp_table.get(response_arp.pkt.psrc))
 
-def attacker_mode(ip):
-    # Read keys from file and initialize keys object - (pub,priv)
-    keys = read_keys(MY_IP)
-
+def attacker_mode(victim_ip):
     arp_thread = threading.Thread(target=listen_data)
     arp_thread.daemon = True
     arp_thread.start()
 
-    # while True:
-        # pass
-
     response_arp = NetworkManager.SecureArp()
-    packet = ARP(op=ARP.is_at, hwsrc=MY_MAC, psrc=ip, hwdst='cc:cc:cc:cc:cc:cc', pdst="192.168.1.64")
+    packet = ARP(op=ARP.is_at, hwsrc=MY_MAC, psrc=victim_ip, hwdst='cc:cc:cc:cc:cc:cc', pdst="192.168.1.64")
     response_arp.pkt = packet
     response_arp.sig = response_arp.sig_size * "A"    
 
