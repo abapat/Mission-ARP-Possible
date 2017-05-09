@@ -50,18 +50,33 @@ def initialize_keys():
     network_ips = ["192.168.1.1", "192.168.1.64", "192.168.1.128", "192.168.1.192",\
              "192.168.1.2", "192.168.1.65", "192.168.1.129", "182.168.1.193"]
 
+    debug("GENERATING KEYS")
+
     with open("DHCP/state.txt", "w") as stateFile:
-        output = ""
+        map = {}
         for ip in network_ips:
-            print ip
+            debug(ip)
             security = SecurityContext.AsymmetricCrypto()
-            output += str({ip:{"public":security.publicKey.exportKey(),\
-                    "private":security.privateKey.exportKey()}})
+            map[ip] = {"public":security.publicKey.exportKey('DER'),\
+                    "private":security.privateKey.exportKey('DER')}
 
-        stateFile.write(output)
+        state = {}
+        for ip in map:
+            state[ip] = map[ip]['public']
 
-    d = ast.literal_eval(output)
-    print d
+        stateFile.write(str(state))
+
+    for ip in map:
+        with open("KEYS/"+ip,"w") as keyFile:
+            keyFile.write(str(map[ip]))
+    debug("Done")
+    #print d
+
+def create_key_manager():
+    with open("DHCP/state.txt","r") as stateFile:
+        state = ast.literal_eval(stateFile.read())
+        key_manager = KeyManager.KeyManager(state)
+        return key_manager
 
 '''
 Connect to DHCP server and receive updates
@@ -78,7 +93,7 @@ def ca_mode(dhcp_ip):
         print "File exists"
 
     # Key manager
-    key_manager = KeyManager.KeyManager()
+    key_manager = create_key_manager()
 
     monitor = FileMonitor(time.time(), FILEPATH, key_manager)
 
@@ -217,6 +232,5 @@ def main():
         c = SecurityContext.AsymmetricCrypto()
         keys = (c.publicKey,c.privateKey)
         host_mode(args[1], keys)
-
 if __name__ == '__main__':
     main()
