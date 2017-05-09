@@ -39,7 +39,7 @@ class FileMonitor():
         self.lastModificationTime = 0
         self.filepath = filepath
         self.manager = manager
-        self.mutex = LOCK()
+        self.mutex = Lock()
 
     def monitor(self):
         while True:
