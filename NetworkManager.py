@@ -108,7 +108,7 @@ class Socket:
             data, addr = self.sock.recvfrom(size)
         except Exception, e:
             exc_type, exc_obj, exc_tb = sys.exc_info()
-            print("Error unpacking data [line %d]: %s" % (exc_tb.tb_lineno,str(e)))
+            # print("Error unpacking data [line %d]: %s" % (exc_tb.tb_lineno,str(e)))
 
         return data, addr
 

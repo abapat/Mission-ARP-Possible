@@ -8,6 +8,9 @@ class ARPTable:
     def __init__(self):
         self.table = dict()
 
+    def get(self, ip):
+        return self.table[ip]
+
     def add(self, ip, mac):
     	self.table[ip] = mac
 

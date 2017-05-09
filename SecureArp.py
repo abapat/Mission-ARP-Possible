@@ -141,17 +141,19 @@ def read_keys(ip_addr):
 
 
 def send_data_link(data, destmac):
-    p = Ether(dst=destmac,src=getMac())/ARP()/Raw(load=data)
+    p = Ether(dst=destmac,src=MY_MAC)/ARP()/Raw(load=data)
     sendp(p)
 
 def handle_arp_request(pkt):
+    print pkt.show()
     if pkt[ARP].hwdst == MY_MAC and pkt[ARP].pdst == MY_IP:
-        desired_ip = arp_table.psrc
-        desired_mac = arp_table.hwsrc
+        desired_ip = pkt[ARP].psrc
+        desired_mac = pkt[ARP].hwsrc
         if arp_table.has(desired_ip):
             arp_table.update(desired_ip, desired_mac)
         else:
             arp_table.add(desired_ip, desired_mac)
+        print desired_ip, desired_mac
 
 def print_packet(pkt):
     if Padding in pkt:
@@ -189,12 +191,11 @@ def host_mode(query_ip, verify_on):
     arp_thread.daemon = True
     arp_thread.start()
 
-
     print("[*] Listening for ARP messages")
 
     while True:
         # if query, respond to it. If response, validate and add to table
-        data, addr = sock.udp_recv_message(NetworkManager.ARP_SIZE)
+        data, addr = sock.udp_recv_message(NetworkManager.ARP_SIZE, wait=True)
         #debug("Received " + str(len(data)) + " bytes")
         if data and addr[0] != MY_IP:
             response_arp = NetworkManager.SecureArp(raw=data)
@@ -223,22 +224,28 @@ def host_mode(query_ip, verify_on):
                         print("Detected Invalid Response from CA: bad sig!")
                         continue
 
-                if verify_on and nonce:
+                if verify_on:
                     # check cache for key or query CA
-                    if response_arp.validate_sig(nonce, key):
+                    if nonce and response_arp.validate_sig(nonce, key):
                         print("[*] Received Valid Response:")
                         response_arp.pkt.show()
+                        nonce = None
                         # Update ARP table
                         handle_arp_request(response_arp.pkt)
+                        print arp_table
                     else:
                         print("[*] Received Invalid Response from %s" % str(addr))
                         print("[*] Cannot send a message because ARP response could not be verified")
                         return
                 else:
                     # Update ARP table
+                    print("[*] Update ARP Table without signature", verify_on, nonce)
                     handle_arp_request(response_arp.pkt)
-
-    send_data_link("This is some test data", arp_table.get(query_ip))
+            print(arp_table)
+            print(addr[0])
+            if arp_table.has(response_arp.pkt.psrc):
+                print("[*] Sending data to", addr[0], "using MAC", arp_table.get(response_arp.pkt.psrc))
+                send_data_link("This is some test data", arp_table.get(response_arp.pkt.psrc))
 
 def attacker_mode(ip):
     # Read keys from file and initialize keys object - (pub,priv)
@@ -248,11 +255,28 @@ def attacker_mode(ip):
     arp_thread.daemon = True
     arp_thread.start()
 
-    response_arp.create_response(MY_MAC, MY_IP, keys)
+    # while True:
+        # pass
+
+    response_arp = NetworkManager.SecureArp()
+    packet = ARP(op=ARP.is_at, hwsrc=MY_MAC, psrc=ip, hwdst='cc:cc:cc:cc:cc:cc', pdst="192.168.1.64")
+    response_arp.pkt = packet
+    response_arp.sig = response_arp.sig_size * "A"    
+
     print("Sending Malicious ARP Update:")
     response_arp.pkt.show()
-    d = (ip,NetworkManager.ARP_PORT)
+    
+    sock = NetworkManager.Socket('192.168.1.64', NetworkManager.ARP_PORT, server=False)
+    sock.send_message(response_arp.serialize(), ('192.168.1.64', NetworkManager.ARP_PORT))
+    
+    # NetworkManager.broadcast_packet(response_arp.serialize(), NetworkManager.ARP_PORT)
+    while True:
+        pass
+    '''
+    d = (ip, NetworkManager.ARP_PORT)
+    sock = NetworkManager.Socket(ip, NetworkManager.ARP_PORT, server=False)
     sock.send_message(response_arp.serialize(), dest=d)
+    '''
 
 def get_public_key(sock, ip):
     ca_sock = NetworkManager.Socket(CA_IP, NetworkManager.CA_PORT)
@@ -320,7 +344,7 @@ def validate_sig(nonce, sig, public_key):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', action="store_true", help='CA mode')
-    parser.add_argument('-a', action="store_true", help='Malicious Host Mode')
+    parser.add_argument('-a', metavar='IP addr', help='Malicious Host Mode with target IP')
     parser.add_argument('-q', metavar='IP addr', nargs="+", help='Send some data via DL layer')
     res = parser.parse_args()
 
@@ -344,7 +368,7 @@ def main():
     if args[0]:
         ca_mode()
     elif args[1]:
-        attacker_mode()
+        attacker_mode(args[1])
     else:
         verify_on = True
         query_ip = None
