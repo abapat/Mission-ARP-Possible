@@ -12,10 +12,10 @@ import threading
 import argparse
 import netifaces
 import KeyManager
+import struct
 
 DEBUG = True
 
-QUERY_MSG_SIZE = 100
 INT_SIZE = 4
 QUERY_TYPE = 'QueryType'
 GET_QUERY_TYPE = 'GET'
@@ -101,17 +101,20 @@ def ca_mode(dhcp_ip):
     server_thread.start()
 
     while True:
-        if ca_sock.check_for_udp_conn():
+        query_size = ca_sock.udp_recv_message(INT_SIZE)
+        if query_size:
             print("[*] Received update from host" + "FIX MEEEEEE")
-            ca_handle_query(key_manager, ca_sock) # handles query and kills conn
+            ca_handle_query(key_manager, query_size, ca_sock) # handles query and kills conn
 
 def read_keys(my_ip):
     keys_str = ""
     with open("KEYS/"+my_ip, "r") as keysFile:
         for line in keysFile:
             keys_str+=line
-    ast.literal_eval(keys_str)
-    return (keys_str["public"], keys_str["private"])
+    keys_map = ast.literal_eval(keys_str)
+    keys = SecurityContext.AsymmetricCrypto(publicKey=keys_map["public"], 
+        privateKey=keys_map["private"])
+    return keys
 
 '''
 First sends a query, if any. Then listens on port for ARP queries and responds to them
@@ -129,7 +132,7 @@ def host_mode(query_ip):
     nonce = None
 
     print("Pub Key:")
-    print keys[0].exportKey()
+    print keys.publicKey.exportKey()
 
     sock = NetworkManager.Socket(my_ip, NetworkManager.ARP_PORT, server=True)
     if query_ip:
@@ -186,17 +189,21 @@ def host_mode(query_ip):
                 # Update ARP table
 
 def get_public_key(sock, ip):
+    ca_sock = NetworkManager.Socket(CA_IP, NetworkManager.CA_PORT)
+    print('asssss'+ str(ca_sock.sock.getsockname()))
+
     print("get_public_key enter")
 
     query = {QUERY_TYPE: GET_QUERY_TYPE, IP_QUERY: ip}
-    sock.send_message(str(query), (CA_IP, NetworkManager.CA_PORT))
+    ca_sock.send_message(str(query), (CA_IP, NetworkManager.CA_PORT))
     print("get_public_key asdfasdf")
 
-    data, addr = sock.udp_recv_message(INT_SIZE, wait=True)
+    data, addr = ca_sock.udp_recv_message(INT_SIZE, wait=True)
+    print(data)
     query_size = int(struct.unpack("!I", data)[0])
     print("get_public_key vvvvnvnvn")
 
-    data, addr = sock.udp_recv_message(query_size, wait=True)
+    data, addr = ca_sock.udp_recv_message(query_size, wait=True)
     print("get_public_key exit")
     return data
 
@@ -213,8 +220,9 @@ def ca_handle_dhcp(key_manager, data, dhcp_sock):
 Handle a public key query from a node
 @arg socket to node - UDP
 '''
-def ca_handle_query(key_manager, ca_sock):
-    data, addr = ca_sock.udp_recv_message(QUERY_MSG_SIZE, True)
+def ca_handle_query(key_manager, query_size, ca_sock):
+    query_size = int(query_size)
+    data, addr = ca_sock.udp_recv_message(query_size, True)
     query = eval(data)
     query_type = query[QUERY_TYPE]
     if query_type == GET_QUERY_TYPE:

@@ -45,8 +45,10 @@ class Socket:
 
         else:
             s.connect((ip, port))
-            print("[*] Connected to %s" % str(ip))
+            print('connect name '+str(s.getsockname()))
+            print("[*] Connected to %s Port %s" % (str(ip), str(port)) )
             self.sock = s
+            print('socket name '+str(self.sock.getsockname()))
 
     def kill_conn(self):
         if self.server:
@@ -58,10 +60,6 @@ class Socket:
             conn, addr = self.sock.accept()
             print("[*] Accepted connection from %s" % str(addr))
             self.conn = conn
-
-    # TODO implement
-    def check_for_udp_conn(self):
-        pass
 
     def __recv(self, size, blocking):
         data = None
@@ -114,13 +112,14 @@ class Socket:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             print("Error unpacking data [line %d]: %s" % (exc_tb.tb_lineno,str(e)))
 
+        print 'data', data
         return data, addr
 
     def send_message(self, msg, dest=None):
         sock = self.sock
         if self.tcp and self.server:
             sock = self.conn
-
+        print(self.sock.getsockname())
         sock.settimeout(None)
         length = struct.pack("I", len(msg))
 
@@ -204,7 +203,7 @@ class SecureArp:
     def create_sig(self, keys):
         nonce = self.sig # nonce + pad, just sign all
         debug("Signing nonce: " + nonce + " len " + str(len(nonce)))
-        c = SecurityContext.AsymmetricCrypto(publicKey=keys[0].exportKey('DER'), privateKey=keys[1].exportKey('DER'))
+        c = SecurityContext.AsymmetricCrypto(publicKey=keys.publicKey.exportKey('DER'), privateKey=keys.privateKey.exportKey('DER'))
         self.sig = c.sign(nonce)
 
     def validate_sig(self, nonce, key):
