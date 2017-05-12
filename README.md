@@ -8,7 +8,25 @@ Amit Bapat
 Varun Sayal
 Leixiang Wu
 
-## Installation and Running
+## Intruction
+
+ARP (Address Resolution Protocol) is a protocol layer between network and data-link
+layer. It is often refereed as 2.5 layer protocol. It is designed to allow members of a network to
+communicate with each other without having to rely on IP routing to reach machines. The ARP
+protocol is ubiquitous and very useful as it allows communication within the network with very
+little overhead and setup. A MAC (Media Access Control) address is all that is needed for this
+type of communication. This specified hardware MAC address is often times burned into the
+NIC(s) (Network Interface Card) of most machines. This MAC address is specified in a 6 hex
+couples (i.e. a3:3d:ef:aa:bc:e1). MAC addressing within networks is a fundamentally useful
+abstraction that allows hosts within a network to communicate via ARP enabled switches. These
+switches behave in a plug-and-play way and learn the topology of the network (i.e. which MAC
+address is on which output port) over time. However, the designers of ARP protocol made an
+assumption everyone in the LAN is trusted. Therefore, they didn’t consider security when they
+design the protocol. Attackers exploit this assumption to achieve ARP spoofing which could lead
+to attacks, ex: man-in-the-middle, denial of service, and spying. To prevent ARP spoofing,
+people have came up with a simple way which is to make ARP table static. Although it does
+make ARP protocol secure, it makes ARP less useful. We propose a new protocol, called
+ARPSec, that achieves security while preserving all the features of ARP.
 
 ## Design
 
